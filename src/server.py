@@ -228,18 +228,14 @@ class P4MCPServer:
         # When enabled, agents MUST know to always supply as_user.
         if self.p4config.impersonation_enabled:
             _as_user_desc = (
-                "REQUIRED. The Perforce username to execute this action as. "
-                "Every tool call MUST include this parameter with a valid Perforce username."
+                "Perforce username to act as (required when impersonation is enabled)."
             )
             _impersonation_note = (
-                "\n\nIMPORTANT: This server uses impersonation. "
-                "You MUST pass the 'as_user' parameter with the Perforce username "
-                "of the person you are acting on behalf of in EVERY tool call."
+                "\n\nImpersonation enabled: always pass 'as_user'."
             )
         else:
             _as_user_desc = (
-                "Impersonation target user. Only available when impersonation is enabled on the server; "
-                "do NOT pass this parameter unless instructed to do so."
+                "Impersonation target user (only use when server impersonation is enabled)."
             )
             _impersonation_note = ""
 
