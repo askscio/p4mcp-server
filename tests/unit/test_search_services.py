@@ -142,3 +142,14 @@ class TestSearchServices:
 
         assert result["message"] == [{"dir": "//depot/one"}, {"dir": "//depot/two"}]
         assert result["truncated"] is True
+
+    @pytest.mark.asyncio
+    async def test_search_files_returns_hint_for_missing_recursive_wildcard(self):
+        p4 = MagicMock()
+        p4.run.side_effect = P4Exception("no such file(s).")
+        service, _ = _service_with_p4(p4)
+
+        result = await service.search_files("//depot/bluetooth", max_results=20)
+
+        assert result["status"] == "error"
+        assert "Try '//depot/bluetooth/...'" in result["message"]

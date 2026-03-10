@@ -201,6 +201,15 @@ class P4MCPServer:
         max_results: int,
     ) -> Optional[dict]:
         """Validate search params and normalize user-facing validation errors."""
+        if action == "search_dirs" and "..." in depot_path:
+            return {
+                "status": "error",
+                "action": action,
+                "message": (
+                    "search_dirs requires '*' wildcards (for example '//depot/*'); "
+                    "do not use '...'."
+                ),
+            }
         try:
             m.SearchParams(
                 action=action,

@@ -89,3 +89,22 @@ class TestSearchToolValidation:
             "action": "search_content",
             "message": "search_text is required when action is 'search_content'",
         }
+
+    def test_clean_error_for_search_dirs_using_ellipsis(self):
+        error = P4MCPServer._validate_search_params(
+            action="search_dirs",
+            depot_path="//depot/...",
+            search_text=None,
+            case_insensitive=False,
+            show_line_numbers=True,
+            filenames_only=False,
+            max_results=100,
+        )
+        assert error == {
+            "status": "error",
+            "action": "search_dirs",
+            "message": (
+                "search_dirs requires '*' wildcards (for example '//depot/*'); "
+                "do not use '...'."
+            ),
+        }

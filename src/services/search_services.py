@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 _GREP_LINE_RE = re.compile(r"^(.+?)#(\d+)(?::(\d+):)?\s*(.*)$")
 
 
+def _looks_like_directory_without_wildcard(depot_path: str) -> bool:
+    return (
+        depot_path.startswith("//")
+        and "..." not in depot_path
+        and "*" not in depot_path
+        and "." not in depot_path.rsplit("/", 1)[-1]
+    )
+
+
 class SearchServices:
     """Service for depot search operations."""
 
@@ -63,6 +72,15 @@ class SearchServices:
                 return {"status": "success", "message": files}
             except P4Exception as e:
                 logger.error(f"P4Error: Failed to search files: {e}")
+                if "no such file(s)" in str(e) and _looks_like_directory_without_wildcard(
+                    depot_path
+                ):
+                    return {
+                        "status": "error",
+                        "message": (
+                            f"{e} Try '{depot_path}/...' for recursive directory search."
+                        ),
+                    }
                 return {"status": "error", "message": str(e)}
 
     async def search_content(
