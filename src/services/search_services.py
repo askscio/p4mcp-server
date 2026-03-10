@@ -13,6 +13,7 @@ import re
 from P4 import P4Exception
 
 from ..core.connection import P4ConnectionManager
+from ..core.config import DEFAULT_SEARCH_MAX_RESULTS_CAP
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,16 @@ _GREP_LINE_RE = re.compile(r"^(.+?)#(\d+)(?::(\d+):)?\s*(.*)$")
 class SearchServices:
     """Service for depot search operations."""
 
-    def __init__(self, connection_manager: P4ConnectionManager):
+    def __init__(
+        self,
+        connection_manager: P4ConnectionManager,
+        max_results_cap: int = DEFAULT_SEARCH_MAX_RESULTS_CAP,
+    ):
         self.connection_manager = connection_manager
+        self.max_results_cap = max_results_cap
+
+    def _effective_max_results(self, requested_max_results: int) -> int:
+        return min(requested_max_results, self.max_results_cap)
 
     async def search_files(
         self,
@@ -39,7 +48,8 @@ class SearchServices:
             effective_user=effective_user
         ) as p4:
             try:
-                results = p4.run("files", f"-m{max_results}", depot_path)
+                effective_max_results = self._effective_max_results(max_results)
+                results = p4.run("files", f"-m{effective_max_results}", depot_path)
                 files = [
                     {
                         "depotFile": item.get("depotFile"),
@@ -70,6 +80,7 @@ class SearchServices:
             effective_user=effective_user
         ) as p4:
             try:
+                effective_max_results = self._effective_max_results(max_results)
                 args = []
                 if show_line_numbers:
                     args.append("-n")
@@ -101,10 +112,10 @@ class SearchServices:
                         entry["content"] = match.group(4)
                     parsed.append(entry)
 
-                truncated = len(parsed) > max_results
+                truncated = len(parsed) > effective_max_results
                 return {
                     "status": "success",
-                    "message": parsed[:max_results],
+                    "message": parsed[:effective_max_results],
                     "truncated": truncated,
                 }
             except P4Exception as e:
@@ -124,10 +135,11 @@ class SearchServices:
             effective_user=effective_user
         ) as p4:
             try:
+                effective_max_results = self._effective_max_results(max_results)
                 results = p4.run("dirs", depot_path)
-                truncated = len(results) > max_results
+                truncated = len(results) > effective_max_results
                 dirs = []
-                for entry in results[:max_results]:
+                for entry in results[:effective_max_results]:
                     if isinstance(entry, str):
                         dirs.append({"dir": entry})
                     elif isinstance(entry, dict):

@@ -10,7 +10,7 @@ import os
 import pytest
 from unittest.mock import patch
 
-from src.core.config import Config, _parse_bool_env
+from src.core.config import Config, _parse_bool_env, DEFAULT_SEARCH_MAX_RESULTS_CAP
 from src.server import P4MCPServer, ImpersonationConfigError
 
 
@@ -66,6 +66,22 @@ class TestConfigImpersonationLoading:
         d = config.to_dict()
         assert "impersonation_enabled" in d
         assert d["impersonation_enabled"] is enabled
+
+    def test_search_cap_defaults_to_200(self):
+        with patch.dict(os.environ, {}, clear=True):
+            config = Config.load()
+        assert config.search_max_results_cap == DEFAULT_SEARCH_MAX_RESULTS_CAP
+
+    def test_search_cap_loads_from_env(self):
+        with patch.dict(os.environ, {"MCP_SEARCH_MAX_RESULTS_CAP": "75"}, clear=True):
+            config = Config.load()
+        assert config.search_max_results_cap == 75
+
+    @pytest.mark.parametrize("raw", ["0", "-1", "abc", "  "])
+    def test_search_cap_invalid_values_fallback_to_default(self, raw):
+        with patch.dict(os.environ, {"MCP_SEARCH_MAX_RESULTS_CAP": raw}, clear=True):
+            config = Config.load()
+        assert config.search_max_results_cap == DEFAULT_SEARCH_MAX_RESULTS_CAP
 
 
 # ---------------------------------------------------------------------------

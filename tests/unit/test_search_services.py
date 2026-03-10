@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from P4 import P4Exception
 
+from src.core.config import DEFAULT_SEARCH_MAX_RESULTS_CAP
 from src.services.search_services import SearchServices
 
 
@@ -17,10 +18,10 @@ class _Conn:
         return False
 
 
-def _service_with_p4(p4):
+def _service_with_p4(p4, max_results_cap=DEFAULT_SEARCH_MAX_RESULTS_CAP):
     manager = MagicMock()
     manager.get_connection.return_value = _Conn(p4)
-    return SearchServices(manager), manager
+    return SearchServices(manager, max_results_cap=max_results_cap), manager
 
 
 class TestSearchServices:
@@ -104,3 +105,40 @@ class TestSearchServices:
             "message": [{"dir": "//depot/one"}, {"dir": "//depot/two"}],
             "truncated": True,
         }
+
+    @pytest.mark.asyncio
+    async def test_search_files_applies_server_side_cap(self):
+        p4 = MagicMock()
+        p4.run.return_value = []
+        service, _ = _service_with_p4(p4, max_results_cap=5)
+
+        await service.search_files("//depot/...", max_results=99)
+
+        p4.run.assert_called_once_with("files", "-m5", "//depot/...")
+
+    @pytest.mark.asyncio
+    async def test_search_content_applies_server_side_cap(self):
+        p4 = MagicMock()
+        p4.tagged = True
+        p4.run.return_value = [
+            "//depot/a.py#1:1: TODO",
+            "//depot/b.py#1:1: TODO",
+            "//depot/c.py#1:1: TODO",
+        ]
+        service, _ = _service_with_p4(p4, max_results_cap=2)
+
+        result = await service.search_content("TODO", max_results=99)
+
+        assert len(result["message"]) == 2
+        assert result["truncated"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_directories_applies_server_side_cap(self):
+        p4 = MagicMock()
+        p4.run.return_value = ["//depot/one", "//depot/two", "//depot/three"]
+        service, _ = _service_with_p4(p4, max_results_cap=2)
+
+        result = await service.list_directories("//depot/*", max_results=99)
+
+        assert result["message"] == [{"dir": "//depot/one"}, {"dir": "//depot/two"}]
+        assert result["truncated"] is True
