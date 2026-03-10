@@ -329,6 +329,71 @@ class P4MCPServer:
             self.process_tool_logs("query_workspaces", result, ctx, as_user=as_user)
             return result
 
+        @self.mcp.tool(tags=["read", "files"], enabled="files" in self.toolsets, description="Get file content, history, info, diff, annotations (READ permission)" + _impersonation_note)
+        async def query_files(
+            action: Annotated[
+                Literal[
+                    "content", "history", "info", "metadata", "diff", "annotations"
+                ],
+                Field(
+                    description="File query action, metadata includes extra information like optional attributes and file size"
+                ),
+            ],
+            file_path: Annotated[
+                str,
+                Field(
+                    description="Primary file path - required for all actions",
+                    examples=["//depot/projectX/file.txt", "/local/path/file.txt"],
+                ),
+            ],
+            ctx: Context,
+            as_user: Annotated[
+                Optional[str],
+                Field(
+                    default=None,
+                    description=_as_user_desc,
+                    examples=["alice", "bob"],
+                ),
+            ] = None,
+            file2: Annotated[
+                Optional[str],
+                Field(
+                    default=None,
+                    description="Second file path - required for diff action",
+                    examples=["//depot/projectX/file2.txt"],
+                ),
+            ] = None,
+            diff2: Annotated[
+                bool,
+                Field(
+                    default=True,
+                    description="Use p4 diff2 for depot-to-depot diff, false for mixed diff",
+                ),
+            ] = True,
+            max_results: Annotated[
+                int,
+                Field(
+                    default=100,
+                    ge=1,
+                    le=1000,
+                    description="Maximum number of results to return",
+                ),
+            ] = 100,
+        ) -> dict:
+            """Get file content, history, info, diff, annotations (READ permission)"""
+            params = m.QueryFilesParams(
+                action=action,
+                file_path=file_path,
+                file2=file2,
+                diff2=diff2,
+                max_results=max_results,
+            )
+            result = await self.handlers.handle(
+                "query", "files", params, effective_user=as_user
+            )
+            self.process_tool_logs("query_files", result, ctx, as_user=as_user)
+            return result
+
         @self.mcp.tool(
             tags=["read", "files"],
             enabled="files" in self.toolsets,
