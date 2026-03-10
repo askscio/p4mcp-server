@@ -17,6 +17,7 @@ class Handlers:
         shelve_services,
         job_services,
         review_services,
+        search_services,
     ):
         self.server_services = server_services
         self.workspace_services = workspace_services
@@ -25,6 +26,7 @@ class Handlers:
         self.shelve_services = shelve_services
         self.job_services = job_services
         self.review_services = review_services
+        self.search_services = search_services
 
         self.reviews_handlers = ReviewsHandlers(review_services)
 
@@ -36,6 +38,7 @@ class Handlers:
             ("query", "changelists"): self._handle_query_changelists,
             ("query", "shelves"): self._handle_query_shelves,
             ("query", "jobs"): self._handle_query_jobs,
+            ("query", "search"): self._handle_search,
             ("modify", "workspaces"): self._handle_modify_workspaces,
             ("modify", "files"): self._handle_modify_files,
             ("modify", "changelists"): self._handle_modify_changelists,
@@ -215,6 +218,43 @@ class Handlers:
             "action": params.action,
             "message": result["message"],
         }
+
+    @handle_errors
+    async def _handle_search(self, params, effective_user=None):
+        if params.action == "search_files":
+            result = await self.search_services.search_files(
+                depot_path=params.depot_path,
+                max_results=params.max_results,
+                effective_user=effective_user,
+            )
+        elif params.action == "search_content":
+            result = await self.search_services.search_content(
+                search_text=params.search_text,
+                depot_path=params.depot_path,
+                max_results=params.max_results,
+                case_insensitive=params.case_insensitive,
+                show_line_numbers=params.show_line_numbers,
+                filenames_only=params.filenames_only,
+                effective_user=effective_user,
+            )
+        elif params.action == "search_dirs":
+            result = await self.search_services.list_directories(
+                depot_path=params.depot_path,
+                max_results=params.max_results,
+                effective_user=effective_user,
+            )
+        else:
+            logger.error(f"Unknown search action: {params.action}")
+            raise ValueError(f"Unknown search action: {params.action}")
+
+        response = {
+            "status": result["status"],
+            "action": params.action,
+            "message": result["message"],
+        }
+        if result.get("truncated"):
+            response["truncated"] = True
+        return response
 
     @handle_errors
     async def _handle_modify_workspaces(self, params, effective_user=None):

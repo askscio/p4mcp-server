@@ -1,1 +1,5 @@
-# This file marks the services directory as a Python package.
+"""Service package exports."""
+
+from .search_services import SearchServices
+
+__all__ = ["SearchServices"]

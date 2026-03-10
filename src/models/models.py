@@ -42,6 +42,11 @@ class JobAction(str, Enum):
     LIST_JOBS = "list_jobs"
     GET_JOB = "get_job"
 
+class SearchAction(str, Enum):
+    SEARCH_FILES = "search_files"
+    SEARCH_CONTENT = "search_content"
+    SEARCH_DIRS = "search_dirs"
+
 class WorkspaceModifyAction(str, Enum):
     CREATE = "create"
     DELETE = "delete"
@@ -334,6 +339,46 @@ class QueryJobsParams(PaginatedParams):
         """Validate job_id is provided when required."""
         if self.action == JobAction.GET_JOB and not self.job_id:
             raise ValueError('job_id is required for get_job action')
+        return self
+
+
+class SearchParams(PaginatedParams):
+    """Search query parameters with action-specific validation."""
+
+    action: SearchAction = Field(
+        description="Search action to perform",
+        examples=["search_files", "search_content", "search_dirs"],
+    )
+    depot_path: str = Field(
+        min_length=1,
+        description=(
+            "Depot path pattern used as scope for file, content, or directory search"
+        ),
+        examples=["//depot/.../*.py", "//depot/...", "//depot/*"],
+    )
+    search_text: Optional[str] = Field(
+        default=None,
+        description="Required for search_content action: text or regex to search",
+        examples=["TODO", "def main", "import.*os"],
+    )
+    case_insensitive: bool = Field(
+        default=False,
+        description="Only for search_content: case-insensitive matching",
+    )
+    show_line_numbers: bool = Field(
+        default=True,
+        description="Only for search_content: include line numbers in results",
+    )
+    filenames_only: bool = Field(
+        default=False,
+        description="Only for search_content: return only matching file paths",
+    )
+
+    @model_validator(mode='after')
+    def validate_search_params(self):
+        """Validate search_content-specific parameters."""
+        if self.action == SearchAction.SEARCH_CONTENT and not self.search_text:
+            raise ValueError("search_text is required for search_content action")
         return self
 
 # =============================================================================

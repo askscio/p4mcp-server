@@ -20,6 +20,7 @@ from .services.workspace_services import WorkspaceServices
 from .services.changelist_services import ChangelistServices
 from .services.job_services import JobServices
 from .services.review_services import ReviewServices
+from .services.search_services import SearchServices
 
 from .middleware.check_permission import CheckPermissionMiddleware
 
@@ -109,6 +110,7 @@ class P4MCPServer:
             shelve_services=ShelveServices(self.p4_manager),
             job_services=JobServices(self.p4_manager),
             review_services=ReviewServices(self.p4_manager),
+            search_services=SearchServices(self.p4_manager),
         )
 
     def process_tool_logs(
@@ -352,6 +354,99 @@ class P4MCPServer:
                 "query", "files", params, effective_user=as_user
             )
             self.process_tool_logs("query_files", result, ctx, as_user=as_user)
+            return result
+
+        @self.mcp.tool(
+            tags=["read", "files"],
+            enabled="files" in self.toolsets,
+            description=(
+                "Search depot files by path pattern, content, or list directories "
+                "(READ permission)"
+            )
+            + _impersonation_note,
+        )
+        async def search(
+            action: Annotated[
+                Literal["search_files", "search_content", "search_dirs"],
+                Field(description="Search action to perform"),
+            ],
+            depot_path: Annotated[
+                str,
+                Field(
+                    description=(
+                        "Depot path pattern. For search_files: file path pattern "
+                        "(e.g. '//depot/.../*.py'). For search_content: file scope "
+                        "to search within (defaults to '//...'). For search_dirs: "
+                        "directory pattern using * wildcard (e.g. '//depot/*')."
+                    ),
+                    examples=["//depot/.../*.py", "//depot/...", "//depot/*"],
+                ),
+            ],
+            ctx: Context,
+            as_user: Annotated[
+                Optional[str],
+                Field(
+                    default=None,
+                    description=_as_user_desc,
+                    examples=["alice", "bob"],
+                ),
+            ] = None,
+            search_text: Annotated[
+                Optional[str],
+                Field(
+                    default=None,
+                    description=(
+                        "Only for search_content: text or regex pattern to search "
+                        "for in file contents"
+                    ),
+                    examples=["TODO", "def main", "import.*os"],
+                ),
+            ] = None,
+            case_insensitive: Annotated[
+                bool,
+                Field(
+                    default=False,
+                    description="Only for search_content: case-insensitive matching",
+                ),
+            ] = False,
+            show_line_numbers: Annotated[
+                bool,
+                Field(
+                    default=True,
+                    description="Only for search_content: include line numbers in results",
+                ),
+            ] = True,
+            filenames_only: Annotated[
+                bool,
+                Field(
+                    default=False,
+                    description="Only for search_content: return only matching file paths",
+                ),
+            ] = False,
+            max_results: Annotated[
+                int,
+                Field(
+                    default=100,
+                    ge=1,
+                    le=1000,
+                    description="Maximum number of results to return",
+                ),
+            ] = 100,
+        ) -> dict:
+            """Search depot files by path pattern, content, or list directories (READ permission)"""
+            params = m.SearchParams(
+                action=action,
+                depot_path=depot_path,
+                search_text=search_text,
+                case_insensitive=case_insensitive,
+                show_line_numbers=show_line_numbers,
+                filenames_only=filenames_only,
+                max_results=max_results,
+            )
+            result = await self.handlers.handle(
+                "query", "search", params, effective_user=as_user
+            )
+            self.process_tool_logs("search", result, ctx, as_user=as_user)
             return result
 
         @self.mcp.tool(
