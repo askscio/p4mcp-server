@@ -2,7 +2,7 @@ import json
 import logging
 import uuid
 from typing import Annotated, Optional, List, Literal
-from pydantic import Field
+from pydantic import Field, ValidationError
 from fastmcp import FastMCP, Context
 from .core.config import Config
 from .logging.global_logging import setup_logging
@@ -110,7 +110,9 @@ class P4MCPServer:
             shelve_services=ShelveServices(self.p4_manager),
             job_services=JobServices(self.p4_manager),
             review_services=ReviewServices(self.p4_manager),
-            search_services=SearchServices(self.p4_manager),
+            search_services=SearchServices(
+                self.p4_manager, max_results_cap=self.p4config.search_max_results_cap
+            ),
         )
 
     def process_tool_logs(
@@ -187,6 +189,37 @@ class P4MCPServer:
             "instruction": "User must explicitly approve this operation",
             "on_approval": "execute_delete",
         }
+
+    @staticmethod
+    def _validate_search_params(
+        action: str,
+        depot_path: str,
+        search_text: Optional[str],
+        case_insensitive: bool,
+        show_line_numbers: bool,
+        filenames_only: bool,
+        max_results: int,
+    ) -> Optional[dict]:
+        """Validate search params and normalize user-facing validation errors."""
+        try:
+            m.SearchParams(
+                action=action,
+                depot_path=depot_path,
+                search_text=search_text,
+                case_insensitive=case_insensitive,
+                show_line_numbers=show_line_numbers,
+                filenames_only=filenames_only,
+                max_results=max_results,
+            )
+            return None
+        except ValidationError as exc:
+            if action == "search_content" and not search_text:
+                return {
+                    "status": "error",
+                    "action": action,
+                    "message": "search_text is required when action is 'search_content'",
+                }
+            return {"status": "error", "action": action, "message": str(exc)}
 
     def _register_tools(self):
         """Register read-only tools (always available)"""
@@ -360,7 +393,8 @@ class P4MCPServer:
             tags=["read", "files"],
             enabled="files" in self.toolsets,
             description=(
-                "Search depot files by path pattern, content, or list directories "
+                "Discover files/content/directories across the depot. "
+                "Use this for broad search; then use file-specific read tools for deep inspection. "
                 "(READ permission)"
             )
             + _impersonation_note,
@@ -374,12 +408,17 @@ class P4MCPServer:
                 str,
                 Field(
                     description=(
-                        "Depot path pattern. For search_files: file path pattern "
-                        "(e.g. '//depot/.../*.py'). For search_content: file scope "
-                        "to search within (defaults to '//...'). For search_dirs: "
-                        "directory pattern using * wildcard (e.g. '//depot/*')."
+                        "Depot path in Perforce syntax (must start with '//'). "
+                        "For search_files use '...' recursively (e.g. '//depot/.../*.c'). "
+                        "For search_content use file scope (e.g. '//depot/src/...'). "
+                        "For search_dirs use '*' and not '...' (e.g. '//depot/*')."
                     ),
-                    examples=["//depot/.../*.py", "//depot/...", "//depot/*"],
+                    examples=[
+                        "//depot/.../*.c",
+                        "//depot/src/...",
+                        "//depot/*",
+                        "//depot/src/*",
+                    ],
                 ),
             ],
             ctx: Context,
@@ -396,10 +435,10 @@ class P4MCPServer:
                 Field(
                     default=None,
                     description=(
-                        "Only for search_content: text or regex pattern to search "
-                        "for in file contents"
+                        "Only for search_content: literal text or regex to grep. "
+                        "This is exact text matching, not semantic/natural-language search."
                     ),
-                    examples=["TODO", "def main", "import.*os"],
+                    examples=["TODO", "def main", "DMA_BURST_SIZE", "QC-[0-9]+"],
                 ),
             ] = None,
             case_insensitive: Annotated[
@@ -429,11 +468,26 @@ class P4MCPServer:
                     default=100,
                     ge=1,
                     le=1000,
-                    description="Maximum number of results to return",
+                    description=(
+                        "Requested maximum results; server may enforce a lower cap "
+                        "via MCP_SEARCH_MAX_RESULTS_CAP."
+                    ),
                 ),
             ] = 100,
         ) -> dict:
             """Search depot files by path pattern, content, or list directories (READ permission)"""
+            validation_error = self._validate_search_params(
+                action=action,
+                depot_path=depot_path,
+                search_text=search_text,
+                case_insensitive=case_insensitive,
+                show_line_numbers=show_line_numbers,
+                filenames_only=filenames_only,
+                max_results=max_results,
+            )
+            if validation_error:
+                self.process_tool_logs("search", validation_error, ctx, as_user=as_user)
+                return validation_error
             params = m.SearchParams(
                 action=action,
                 depot_path=depot_path,

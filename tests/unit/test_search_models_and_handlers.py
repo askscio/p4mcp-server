@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from src.handlers.handlers import Handlers
 from src.models import models as m
+from src.server import P4MCPServer
 
 
 def _make_handlers(search_services):
@@ -70,3 +71,21 @@ class TestSearchHandler:
         assert result["status"] == "success"
         assert result["action"] == "search_dirs"
         assert result["truncated"] is True
+
+
+class TestSearchToolValidation:
+    def test_clean_error_for_missing_search_text(self):
+        error = P4MCPServer._validate_search_params(
+            action="search_content",
+            depot_path="//depot/...",
+            search_text=None,
+            case_insensitive=False,
+            show_line_numbers=True,
+            filenames_only=False,
+            max_results=100,
+        )
+        assert error == {
+            "status": "error",
+            "action": "search_content",
+            "message": "search_text is required when action is 'search_content'",
+        }
