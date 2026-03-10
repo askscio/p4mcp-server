@@ -23,57 +23,88 @@ from ..core.connection import P4ConnectionManager
 
 logger = logging.getLogger(__name__)
 
+
 class ShelveServices:
     """Shelve services for shelve operations"""
-    
+
     def __init__(self, connection_manager: P4ConnectionManager):
         self.connection_manager = connection_manager
 
-    async def list_shelves(self, user: str, limit: int = 50) -> List[Dict[str, Any]]:
+    async def list_shelves(
+        self, user: str, limit: int = 50, effective_user: str | None = None
+    ) -> List[Dict[str, Any]]:
         """List shelved changelists"""
-        async with self.connection_manager.get_connection() as p4:
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 args = ["changes", "-s", "shelved", f"-m{limit}"]
                 if user:
                     args.append("-u")
                     args.append(user)
                 shelves = p4.run(*args)
-                return {"status": "success", "message": [{k: v for k, v in shelf.items()} for shelf in shelves]}
+                return {
+                    "status": "success",
+                    "message": [{k: v for k, v in shelf.items()} for shelf in shelves],
+                }
             except P4Exception as e:
                 logger.error(f"P4Error: Failed to list shelves: {e}")
                 return {"status": "error", "message": str(e)}
 
-    async def get_shelve_diff(self, changelist_id: str) -> str:
+    async def get_shelve_diff(
+        self, changelist_id: str, effective_user: str | None = None
+    ) -> str:
         """Get diff of a shelved changelist"""
-        async with self.connection_manager.get_connection() as p4:
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 current_tag = p4.tagged
                 p4.tagged = False
                 diff = p4.run("describe", "-a", "-S", "-dw", changelist_id)
                 return {"status": "success", "message": diff}
             except P4Exception as e:
-                logger.error(f"P4Error: Failed to get shelve diff for changelist '{changelist_id}': {e}")
+                logger.error(
+                    f"P4Error: Failed to get shelve diff for changelist '{changelist_id}': {e}"
+                )
                 return {"status": "error", "message": str(e)}
             finally:
                 p4.tagged = current_tag
 
-    async def get_shelve_files(self, changelist_id: str) -> List[Dict[str, Any]]:
+    async def get_shelve_files(
+        self, changelist_id: str, effective_user: str | None = None
+    ) -> List[Dict[str, Any]]:
         """Get files in a shelved changelist"""
-        async with self.connection_manager.get_connection() as p4:
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 current_tag = p4.tagged
                 p4.tagged = True
-                files = p4.run_describe( "-S", changelist_id)
-                return {"status": "success", "message": [{k: v for k, v in file.items()} for file in files]}
+                files = p4.run_describe("-S", changelist_id)
+                return {
+                    "status": "success",
+                    "message": [{k: v for k, v in file.items()} for file in files],
+                }
             except P4Exception as e:
-                logger.error(f"P4Error: Failed to get shelved files for changelist '{changelist_id}': {e}")
+                logger.error(
+                    f"P4Error: Failed to get shelved files for changelist '{changelist_id}': {e}"
+                )
                 return {"status": "error", "message": str(e)}
             finally:
                 p4.tagged = current_tag
 
-    async def shelve_files(self, changelist_id: str, files: List[str], force: bool = False) -> Dict[str, Any]:
+    async def shelve_files(
+        self,
+        changelist_id: str,
+        files: List[str],
+        force: bool = False,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """Shelve files in a changelist"""
-        async with self.connection_manager.get_connection() as p4:
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 if force:
                     shelved = p4.run("shelve", "-f", "-c", changelist_id, *files)
@@ -81,12 +112,22 @@ class ShelveServices:
                     shelved = p4.run("shelve", "-c", changelist_id, *files)
                 return {"status": "success", "message": shelved}
             except P4Exception as e:
-                logger.error(f"P4Error: Failed to shelve files in changelist '{changelist_id}': {e}")
+                logger.error(
+                    f"P4Error: Failed to shelve files in changelist '{changelist_id}': {e}"
+                )
                 return {"status": "error", "message": str(e)}
 
-    async def unshelve_files(self, changelist_id: str, files: List[str], force: bool = False) -> Dict[str, Any]:
+    async def unshelve_files(
+        self,
+        changelist_id: str,
+        files: List[str],
+        force: bool = False,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """Unshelve files from a shelved changelist"""
-        async with self.connection_manager.get_connection() as p4:
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 if force:
                     unshelved = p4.run("unshelve", "-f", "-s", changelist_id, *files)
@@ -94,12 +135,18 @@ class ShelveServices:
                     unshelved = p4.run("unshelve", "-s", changelist_id, *files)
                 return {"status": "success", "message": unshelved}
             except P4Exception as e:
-                logger.error(f"P4Error: Failed to unshelve files from changelist '{changelist_id}': {e}")
+                logger.error(
+                    f"P4Error: Failed to unshelve files from changelist '{changelist_id}': {e}"
+                )
                 return {"status": "error", "message": str(e)}
 
-    async def delete_shelve(self, changelist_id: str, files: List[str]) -> None:
+    async def delete_shelve(
+        self, changelist_id: str, files: List[str], effective_user: str | None = None
+    ) -> None:
         """Delete a shelved changelist"""
-        async with self.connection_manager.get_connection() as p4:
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 args = ["shelve", "-d", "-c", changelist_id]
                 if files:
@@ -110,9 +157,17 @@ class ShelveServices:
                 logger.error(f"P4Error: Failed to delete shelve '{changelist_id}': {e}")
                 return {"status": "error", "message": str(e)}
 
-    async def update_shelve(self, changelist_id: str, files: List[str], force: bool = False) -> Dict[str, Any]:
+    async def update_shelve(
+        self,
+        changelist_id: str,
+        files: List[str],
+        force: bool = False,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """Update a shelved changelist with new files"""
-        async with self.connection_manager.get_connection() as p4:
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 if force:
                     updated = p4.run("shelve", "-f", "-c", changelist_id, *files)
@@ -123,15 +178,26 @@ class ShelveServices:
                 logger.error(f"P4Error: Failed to update shelve '{changelist_id}': {e}")
                 return {"status": "error", "message": str(e)}
 
-    async def unshelve_to_changelist(self, changelist_id: str, target_changelist: str) -> Dict[str, Any]:
+    async def unshelve_to_changelist(
+        self,
+        changelist_id: str,
+        target_changelist: str,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """Unshelve files to a specific changelist"""
-        async with self.connection_manager.get_connection() as p4:
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 if target_changelist == "default":
                     unshelved = p4.run("unshelve", "-s", changelist_id)
                 else:
-                    unshelved = p4.run("unshelve", "-s", changelist_id, "-c", target_changelist)
+                    unshelved = p4.run(
+                        "unshelve", "-s", changelist_id, "-c", target_changelist
+                    )
                 return {"status": "success", "message": unshelved}
             except P4Exception as e:
-                logger.error(f"P4Error: Failed to unshelve files from changelist '{changelist_id}' to '{target_changelist}': {e}")
+                logger.error(
+                    f"P4Error: Failed to unshelve files from changelist '{changelist_id}' to '{target_changelist}': {e}"
+                )
                 return {"status": "error", "message": str(e)}

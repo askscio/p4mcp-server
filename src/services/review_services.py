@@ -63,37 +63,40 @@ class ReviewServices:
     Covers all major review endpoints from Swarm API 2025.2
     """
 
-    def __init__(self, connection_manager: P4ConnectionManager, verify_ssl: bool = True):
+    def __init__(
+        self, connection_manager: P4ConnectionManager, verify_ssl: bool = True
+    ):
         self.connection_manager = connection_manager
         self.verify_ssl = verify_ssl
 
-    async def _get_auth(self):
-        """Get authentication credentials from P4 connection"""
-        async with self.connection_manager.get_connection() as p4:
+    async def _get_auth_and_base(self, effective_user: str | None = None):
+        """Get authentication credentials and API base URL in a single P4 connection."""
+        async with self.connection_manager.get_connection(
+            effective_user=effective_user
+        ) as p4:
             try:
                 username = p4.user
                 ticket = p4.password
-                
-                if not ticket or ticket.strip() == "":
-                    logger.error(f"P4Error: No valid ticket found for user '{username}'. Please run 'p4 login'.")
-                    raise Exception(f"No P4 ticket found for user '{username}'. Please run 'p4 login' first.")
-                
-                return HTTPBasicAuth(username, ticket)
-            except P4Exception as e:
-                logger.error(f"P4Error: Failed to get authentication credentials: {e}")
-                raise
 
-    async def _get_api_base(self):
-        async with self.connection_manager.get_connection() as p4:
-            try:
+                if not ticket or ticket.strip() == "":
+                    logger.error(
+                        f"P4Error: No valid ticket found for user '{username}'. Please run 'p4 login'."
+                    )
+                    raise Exception(
+                        f"No P4 ticket found for user '{username}'. Please run 'p4 login' first."
+                    )
+
+                auth = HTTPBasicAuth(username, ticket)
+
                 prop = p4.run("property", "-l", "-n", "P4.Swarm.URL")
-                swarm_url = prop[0].get('value', None)
+                swarm_url = prop[0].get("value", None)
                 if not swarm_url:
                     raise Exception("Swarm URL not configured on the server.")
-                self.api_base = f"{swarm_url.rstrip('/')}/api/v11"
-                return self.api_base
+                api_base = f"{swarm_url.rstrip('/')}/api/v11"
+
+                return auth, api_base
             except P4Exception as e:
-                logger.error(f"P4Error: Failed to get Swarm URL: {e}")
+                logger.error(f"P4Error: Failed to get auth/API base: {e}")
                 raise
 
     def _handle_response(self, response):
@@ -104,27 +107,27 @@ class ReviewServices:
                 return {"message": response.text}
         else:
             raise Exception(f"HTTP {response.status_code}: {response.text}")
-        
+
     # ============================================================================
     # GET endpoints
     # ============================================================================
-    
+
     async def list_reviews(
-            self,
-            max_results: int = 50,
-            after: Optional[str] = None,
-            after_updated: Optional[str] = None,
-            result_order: Optional[str] = None,
-            projects: Optional[List[str]] = None,
-            state: Optional[List[str]] = None,
-            keywords: Optional[str] = None,
-            keywords_fields: Optional[List[str]] = None,
-            fields: Optional[List[str]] = None,
-        ) -> Dict[str, Any]:
+        self,
+        max_results: int = 50,
+        after: Optional[str] = None,
+        after_updated: Optional[str] = None,
+        result_order: Optional[str] = None,
+        projects: Optional[List[str]] = None,
+        state: Optional[List[str]] = None,
+        keywords: Optional[str] = None,
+        keywords_fields: Optional[List[str]] = None,
+        fields: Optional[List[str]] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """GET /api/v11/reviews - List reviews with optional filters (v11 compliant)"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews"
             params = {"max": max_results}
 
@@ -157,13 +160,11 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def review_dashboard(
-            self, 
-            max_results: int = 10
-        ) -> Dict[str, Any]:
+        self, max_results: int = 10, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """GET /api/v11/reviews/dashboard - Get review dashboard for current user"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/dashboard"
             params = {"max": max_results}
             r = requests.get(url, auth=auth, params=params, verify=self.verify_ssl)
@@ -171,15 +172,13 @@ class ReviewServices:
         except Exception as e:
             logger.error(f"Failed to get review dashboard: {e}")
             return {"status": "error", "message": str(e)}
-        
+
     async def get_review_transitions(
-            self, 
-            review_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """GET /api/v11/reviews/{id}/transitions - Get transitions and blockers for a review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/transitions"
             r = requests.get(url, auth=auth, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
@@ -188,15 +187,15 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def get_review_info(
-            self,
-            review_id: int,
-            fields: Optional[List[str]] = None,
-            include_transitions: bool = False,
-        ) -> Dict[str, Any]:
+        self,
+        review_id: int,
+        fields: Optional[List[str]] = None,
+        include_transitions: bool = False,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """GET /api/v11/reviews/{id} - Get information about a review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}"
             params = {}
 
@@ -205,20 +204,23 @@ class ReviewServices:
             if include_transitions:
                 params["transitions"] = "true"
 
-            r = requests.get(url, auth=auth, params=params if params else None, verify=self.verify_ssl)
+            r = requests.get(
+                url,
+                auth=auth,
+                params=params if params else None,
+                verify=self.verify_ssl,
+            )
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
             logger.error(f"Failed to get review info for '{review_id}': {e}")
             return {"status": "error", "message": str(e)}
 
     async def get_review_files_readby(
-            self, 
-            review_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """GET /api/v11/reviews/{id}/files/readby - Get read status of review files"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/files/readby"
             r = requests.get(url, auth=auth, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
@@ -227,17 +229,17 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def get_review_files(
-            self,
-            review_id: int,
-            from_version: Optional[int] = None,
-            to_version: Optional[int] = None
-        ) -> Dict[str, Any]:
+        self,
+        review_id: int,
+        from_version: Optional[int] = None,
+        to_version: Optional[int] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """GET /api/v11/reviews/{id}/files?from={x}&to={y}
         Get list of files that changed between specified versions of a review.
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/files"
             params = {}
 
@@ -246,41 +248,46 @@ class ReviewServices:
             if to_version is not None:
                 params["to"] = to_version
 
-            r = requests.get(url, auth=auth, params=params if params else None, verify=self.verify_ssl)
+            r = requests.get(
+                url,
+                auth=auth,
+                params=params if params else None,
+                verify=self.verify_ssl,
+            )
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
             logger.error(f"Failed to get review files for '{review_id}': {e}")
             return {"status": "error", "message": str(e)}
-        
+
     async def get_review_activity(
-            self, 
-            review_id: int, 
-            max_results: int = 100
-        ) -> Dict[str, Any]:
+        self, review_id: int, max_results: int = 100, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """GET /api/v11/reviews/{id}/activity - Get activity for a review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/activity"
 
             params = {}
             if max_results:
                 params["max"] = max_results
 
-            r = requests.get(url, auth=auth, params=params if params else None, verify=self.verify_ssl)
+            r = requests.get(
+                url,
+                auth=auth,
+                params=params if params else None,
+                verify=self.verify_ssl,
+            )
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
             logger.error(f"Failed to get activity for review '{review_id}': {e}")
             return {"status": "error", "message": str(e)}
-        
+
     async def get_review_comments(
-            self, 
-            review_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """GET /api/v11/reviews/{id}/comments - Get a list of comments on a review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/comments"
             r = requests.get(url, auth=auth, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
@@ -293,15 +300,16 @@ class ReviewServices:
     # ============================================================================
 
     async def create_review(
-            self,
-            change_id: int,
-            description: Optional[str] = None,
-            reviewers: Optional[List[str]] = None,
-            required_reviewers: Optional[List[str]] = None,
-            reviewer_groups: Optional[List[Dict[str, Any]]] = None,
-        ) -> Dict[str, Any]:
+        self,
+        change_id: int,
+        description: Optional[str] = None,
+        reviewers: Optional[List[str]] = None,
+        required_reviewers: Optional[List[str]] = None,
+        reviewer_groups: Optional[List[Dict[str, Any]]] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews - Create a new review
-        
+
         Args:
             change_id = "12345"
             description = "This is the review description."
@@ -315,8 +323,7 @@ class ReviewServices:
             state = "needsReview"
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews"
             payload: Dict[str, Any] = {"change": change_id}
 
@@ -339,13 +346,11 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def refresh_review_projects(
-            self, 
-            review_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/refreshProjects - Refresh project associations for a review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/refreshProjects"
             r = requests.post(url, auth=auth, json={}, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
@@ -354,21 +359,21 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def vote_review(
-            self,
-            review_id: int,
-            vote_value: str = "up",
-            version: Optional[int] = None
-        ) -> Dict[str, Any]:
+        self,
+        review_id: int,
+        vote_value: str = "up",
+        version: Optional[int] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/vote - Vote on a review
-        
+
         Args:
             review_id = "12345"
             vote_value = "up"|"down"|"clear"
             version = 1
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/vote"
             payload = {"vote": vote_value}
 
@@ -382,25 +387,25 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def transition_review_state(
-            self,
-            review_id: int,
-            transition: str,
-            jobs: Optional[List[str]] = None,
-            fix_status: Optional[str] = None,
-            cleanup: Optional[bool] = None,
-        ) -> Dict[str, Any]:
+        self,
+        review_id: int,
+        transition: str,
+        jobs: Optional[List[str]] = None,
+        fix_status: Optional[str] = None,
+        cleanup: Optional[bool] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/transitions - Change review state
-        
+
         Args:
-            review_id = "12345"                 
+            review_id = "12345"
             transition = "needsRevision"|"needsReview"|"approved"|"committed"|"approved:commit"|"rejected"|"archived"
-            jobs = ["job000001", "job000015"]   
+            jobs = ["job000001", "job000015"]
             fix_status = "closed"|"open"
             cleanup = True|False
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/transitions"
 
             payload: Dict[str, Any] = {"transition": transition}
@@ -419,23 +424,23 @@ class ReviewServices:
         except Exception as e:
             logger.error(f"Failed to transition review state for '{review_id}': {e}")
             return {"status": "error", "message": str(e)}
-        
+
     async def append_participants(
-            self,
-            review_id: int,
-            users: Optional[List[str]] = None,
-            groups: Optional[List[str]] = None
-        ) -> Dict[str, Any]:
+        self,
+        review_id: int,
+        users: Optional[List[str]] = None,
+        groups: Optional[List[str]] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/participants - Append participants to review
-        
-        Args:            
+
+        Args:
             review_id = "12345"
             users = ["alice", "bob"]
             groups = ["dev-team", "qa-team"]
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/participants"
             payload = {"participants": {}}
 
@@ -452,15 +457,16 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def add_review_comment(
-            self,
-            review_id: int, 
-            body: str,
-            task_state: Optional[str] = None,
-            notify: Optional[str] = None,
-            context: Optional[CommentContext] = None,
-        ) -> Dict[str, Any]:
+        self,
+        review_id: int,
+        body: str,
+        task_state: Optional[str] = None,
+        notify: Optional[str] = None,
+        context: Optional[CommentContext] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/comments - Add a comment to a review
-        
+
         Args:
             review_id = "885"
             body = "This is a comment."
@@ -482,10 +488,9 @@ class ReviewServices:
                     "comment": 99                           # integer, optional: replying to another comment
                 }
         """
-        
+
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/comments"
             params = {}
             if notify:
@@ -514,88 +519,82 @@ class ReviewServices:
             if task_state:
                 payload["taskState"] = task_state
 
-            r = requests.post(url, auth=auth, params=params, json=payload, verify=self.verify_ssl)
+            r = requests.post(
+                url, auth=auth, params=params, json=payload, verify=self.verify_ssl
+            )
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
             logger.error(f"Failed to add comment to review '{review_id}': {e}")
             return {"status": "error", "message": str(e)}
 
     async def reply_to_comment(
-            self, 
-            review_id: int, 
-            comment_id: str,
-            body: str
-        ) -> Dict[str, Any]:
+        self,
+        review_id: int,
+        comment_id: str,
+        body: str,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/comments - Reply to a comment
-        
+
         Args:
             review_id = "885"
             comment_id = "1234"
             body = "This is a reply to the comment."
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/comments"
-            payload = {"body": body, "context" : {}}
+            payload = {"body": body, "context": {}}
             payload["context"]["comment"] = int(comment_id)
             r = requests.post(url, auth=auth, json=payload, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
-            logger.error(f"Failed to reply to comment '{comment_id}' in review '{review_id}': {e}")
+            logger.error(
+                f"Failed to reply to comment '{comment_id}' in review '{review_id}': {e}"
+            )
             return {"status": "error", "message": str(e)}
-        
+
     async def append_change_to_review(
-            self, 
-            review_id: int, 
-            change_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, change_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/appendchange - Append a changelist to a pre-commit review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/appendchange"
             payload = {"changeId": change_id}
             r = requests.post(url, auth=auth, json=payload, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
-            logger.error(f"Failed to append change '{change_id}' to review '{review_id}': {e}")
+            logger.error(
+                f"Failed to append change '{change_id}' to review '{review_id}': {e}"
+            )
             return {"status": "error", "message": str(e)}
-        
+
     async def replace_review_with_change(
-            self, 
-            review_id: int, 
-            change_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, change_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/replacewithchange - Replace review with a new change"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/replacewithchange"
             payload = {"changeId": change_id}
             r = requests.post(url, auth=auth, json=payload, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
 
         except Exception as e:
-            logger.error(f"Failed to replace review '{review_id}' with change '{change_id}': {e}")
+            logger.error(
+                f"Failed to replace review '{review_id}' with change '{change_id}': {e}"
+            )
             return {"status": "error", "message": str(e)}
 
     async def join_review(
-            self, 
-            review_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/join - Join a review as a participant"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/join"
-            body = {
-                        "participants": {
-                            "users": {
-                               auth.username : []
-                            }
-                        }
-                    }
+            body = {"participants": {"users": {auth.username: []}}}
             r = requests.post(url, auth=auth, json=body, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
@@ -603,26 +602,23 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def archive_inactive_reviews(
-            self, 
-            not_updated_since: str,
-            max_reviews: int = 0,
-            description: str = "Archiving inactive reviews"
-        ) -> Dict[str, Any]:
+        self,
+        not_updated_since: str,
+        max_reviews: int = 0,
+        description: str = "Archiving inactive reviews",
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/archiveInactive - Archive inactive reviews
-        
+
         Args:
             not_updated_since = "2023-06-06"
             max_reviews = 50
             description = "This is the description"
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/archiveInactive"
-            payload = {
-                "notUpdatedSince": not_updated_since,
-                "description": description
-            }
+            payload = {"notUpdatedSince": not_updated_since, "description": description}
 
             if max_reviews > 0:
                 payload["max"] = max_reviews
@@ -632,70 +628,65 @@ class ReviewServices:
         except Exception as e:
             logger.error(f"Failed to archive inactive reviews: {e}")
             return {"status": "error", "message": str(e)}
-        
 
     # ============================================================================
     # POST Comments endpoints
     # ============================================================================
 
     async def mark_comment_as_read(
-            self, 
-            comment_id: int
-        ) -> Dict[str, Any]:
+        self, comment_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """POST /api/v11/comments/{id}/read - Mark a comment as read"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/comments/{comment_id}/read"
             r = requests.post(url, auth=auth, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
             logger.error(f"Failed to mark comment '{comment_id}' as read: {e}")
             return {"status": "error", "message": str(e)}
-        
+
     async def mark_comment_as_unread(
-            self,
-            comment_id: int
-        ) -> Dict[str, Any]:
+        self, comment_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """POST /api/v11/comments/{id}/unread - Mark a comment as unread"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/comments/{comment_id}/unread"
             r = requests.post(url, auth=auth, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
             logger.error(f"Failed to mark comment '{comment_id}' as unread: {e}")
             return {"status": "error", "message": str(e)}
-        
+
     async def mark_all_comments_as_read(
-            self,
-            review_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/comments/read - Mark all comments in a review as read"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/comments/read"
             r = requests.post(url, auth=auth, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
-            logger.error(f"Failed to mark all comments in review '{review_id}' as read: {e}")
+            logger.error(
+                f"Failed to mark all comments in review '{review_id}' as read: {e}"
+            )
             return {"status": "error", "message": str(e)}
-        
+
     async def mark_all_comments_as_unread(
-            self,
-            review_id: int
-        ) -> Dict[str, Any]:
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """POST /api/v11/reviews/{id}/comments/unread - Mark all comments in a review as unread"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/comments/unread"
             r = requests.post(url, auth=auth, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
-            logger.error(f"Failed to mark all comments in review '{review_id}' as unread: {e}")
+            logger.error(
+                f"Failed to mark all comments in review '{review_id}' as unread: {e}"
+            )
             return {"status": "error", "message": str(e)}
 
     # ============================================================================
@@ -703,10 +694,8 @@ class ReviewServices:
     # ============================================================================
 
     async def update_review_author(
-            self, 
-            review_id: int, 
-            new_author: str
-        ) -> Dict[str, Any]:
+        self, review_id: int, new_author: str, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """PUT /api/v11/reviews/{id}/author - Update review author
 
         Args:
@@ -714,8 +703,7 @@ class ReviewServices:
             new_author: The new author username
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/author"
             payload = {"author": new_author}
             r = requests.put(url, auth=auth, json=payload, verify=self.verify_ssl)
@@ -725,10 +713,8 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def update_review_description(
-            self, 
-            review_id: int, 
-            new_description: str
-        ) -> Dict[str, Any]:
+        self, review_id: int, new_description: str, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """PUT /api/v11/reviews/{id}/description - Update review description
 
         Args:
@@ -736,8 +722,7 @@ class ReviewServices:
             new_description: The new description text
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/description"
             payload = {"description": new_description}
             r = requests.put(url, auth=auth, json=payload, verify=self.verify_ssl)
@@ -747,45 +732,50 @@ class ReviewServices:
             return {"status": "error", "message": str(e)}
 
     async def replace_participants(
-            self, 
-            review_id: int, 
-            users: Optional[Dict[str, Dict[str, str]]] = None,
-            groups: Optional[Dict[str, Dict[str, str]]] = None
-        ) -> Dict[str, Any]:
+        self,
+        review_id: int,
+        users: Optional[Dict[str, Dict[str, str]]] = None,
+        groups: Optional[Dict[str, Dict[str, str]]] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """PUT /api/v11/reviews/{id}/participants - Replace all participants
-        
+
         Args:
             review_id: The review ID
             users: Dict of username -> {"required": "yes"|"no"}
             groups: Dict of groupname -> {"required": "none"|"all"|"one"}
         """
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/participants"
             payload = {"participants": {}}
             if users:
                 payload["participants"]["users"] = users
             if groups:
                 payload["participants"]["groups"] = groups
-                        
+
             r = requests.put(url, auth=auth, json=payload, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
-            logger.error(f"Failed to replace participants for review '{review_id}': {e}")
+            logger.error(
+                f"Failed to replace participants for review '{review_id}': {e}"
+            )
             return {"status": "error", "message": str(e)}
 
     # ============================================================================
     # DELETE endpoints
     # ============================================================================
 
-    async def delete_participants(self, review_id: int,
-                                 users: Optional[List[str]] = None,
-                                 groups: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def delete_participants(
+        self,
+        review_id: int,
+        users: Optional[List[str]] = None,
+        groups: Optional[List[str]] = None,
+        effective_user: str | None = None,
+    ) -> Dict[str, Any]:
         """DELETE /api/v11/reviews/{id}/participants - Delete participants from review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}/participants"
 
             body = {"participants": {}}
@@ -795,26 +785,23 @@ class ReviewServices:
 
             if groups:
                 body["participants"]["groups"] = {g: [] for g in groups}
-                
+
             r = requests.delete(url, auth=auth, json=body, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
         except Exception as e:
-            logger.error(f"Failed to delete participants from review '{review_id}': {e}")
+            logger.error(
+                f"Failed to delete participants from review '{review_id}': {e}"
+            )
             return {"status": "error", "message": str(e)}
 
-    async def leave_review(self, review_id: int) -> Dict[str, Any]:
+    async def leave_review(
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """DELETE /api/v11/reviews/{id}/leave - Leave a review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
-            body = {
-                        "participants": {
-                            "users": {
-                               auth.username : []
-                            }
-                        }
-                    }
-            
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
+            body = {"participants": {"users": {auth.username: []}}}
+
             url = f"{api_base}/reviews/{review_id}/leave"
             r = requests.delete(url, auth=auth, json=body, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
@@ -822,11 +809,12 @@ class ReviewServices:
             logger.error(f"Failed to leave review '{review_id}': {e}")
             return {"status": "error", "message": str(e)}
 
-    async def obliterate_review(self, review_id: int) -> Dict[str, Any]:
+    async def obliterate_review(
+        self, review_id: int, effective_user: str | None = None
+    ) -> Dict[str, Any]:
         """DELETE /api/v11/reviews/{id} - Obliterate (permanently delete) a review"""
         try:
-            auth = await self._get_auth()
-            api_base = await self._get_api_base()
+            auth, api_base = await self._get_auth_and_base(effective_user=effective_user)
             url = f"{api_base}/reviews/{review_id}"
             r = requests.delete(url, auth=auth, verify=self.verify_ssl)
             return {"status": "success", "message": self._handle_response(r)}
