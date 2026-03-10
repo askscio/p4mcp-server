@@ -505,6 +505,62 @@ Example: Even if `noaccessuser` is in `accessgroup` (where MCP is enabled), the 
 
 - Avoid global properties (`-a` without `-u` or `-g`) unless you absolutely need to disable MCP for everyone.
 
+## Superuser impersonation
+
+When the MCP server is backed by a Perforce superuser account, impersonation
+allows each tool call to execute as a different user via the `as_user` parameter.
+
+### Configuration
+
+| Environment variable | Type | Default | Description |
+|---|---|---|---|
+| `MCP_IMPERSONATION_ENABLED` | bool | `false` | Enable per-call impersonation via `as_user` |
+
+The server authenticates with the superuser account configured through `P4USER`.
+When `MCP_IMPERSONATION_ENABLED=true`, every P4-backed tool call **must** include
+`as_user` to identify the effective user. The server will fail fast at startup if
+impersonation is enabled but `P4USER` is not set.
+
+### Behaviour
+
+| Impersonation | `as_user` supplied | Result |
+|---|---|---|
+| Disabled | No | Normal operation (legacy) |
+| Disabled | Yes | **Denied** (`IMPERSONATION_DISABLED`) |
+| Enabled | No | **Denied** (`AS_USER_REQUIRED`) |
+| Enabled | Yes | Executes as `as_user` |
+
+### Denial reason codes
+
+When a request is denied by impersonation policy, the error response includes a
+machine-readable `reason_code`:
+
+- `IMPERSONATION_DISABLED` -- `as_user` was provided but impersonation is off.
+- `AS_USER_REQUIRED` -- impersonation is on but no `as_user` was supplied.
+
+### Audit logging
+
+Every tool invocation emits a single audit summary event containing:
+
+| Field | Description |
+|---|---|
+| `request_id` | Unique ID for this invocation |
+| `session_id` | MCP session ID (if available) |
+| `tool_name` | The tool that was called |
+| `actor_user` | The superuser account (from `P4USER`) |
+| `effective_user` | The identity the command ran as (`as_user` or `actor_user`) |
+| `outcome` | `success`, `error`, or `denied` |
+| `reason_code` | Present on denials/errors only |
+
+If the actor cannot be resolved, `actor_user` is logged as `unknown_actor` with
+a warning marker.
+
+### Concurrency
+
+Each impersonated call uses a fresh, request-scoped P4 connection with `p4.user`
+set to the effective user. Concurrent requests for different users are fully
+isolated and never share connection state.
+
 ## Available tools
 
 ### Query tools (read operations)
