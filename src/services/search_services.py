@@ -126,9 +126,15 @@ class SearchServices:
             try:
                 results = p4.run("dirs", depot_path)
                 truncated = len(results) > max_results
+                dirs = []
+                for entry in results[:max_results]:
+                    if isinstance(entry, str):
+                        dirs.append({"dir": entry})
+                    elif isinstance(entry, dict):
+                        dirs.append({"dir": entry.get("dir")})
                 return {
                     "status": "success",
-                    "message": results[:max_results],
+                    "message": dirs,
                     "truncated": truncated,
                 }
             except P4Exception as e:
