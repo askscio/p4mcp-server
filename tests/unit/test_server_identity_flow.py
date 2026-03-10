@@ -20,6 +20,7 @@ from src.services.workspace_services import WorkspaceServices
 from src.services.shelve_services import ShelveServices
 from src.services.job_services import JobServices
 from src.services.review_services import ReviewServices
+from src.services.search_services import SearchServices
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +73,9 @@ _SERVICE_METHOD_MATRIX = [
     (ServerServices, ["get_server_info", "get_current_user"]),
     (FileServices, [
         "get_file_content", "get_file_history", "get_file_info",
-        "add_files", "edit_files", "delete_files", "sync_files",
+        "get_file_metadata", "diff_files", "get_file_annotations",
+        "add_files", "edit_files", "delete_files", "move_files",
+        "revert_files", "reconcile_files", "resolve_files", "sync_files",
     ]),
     (ChangelistServices, [
         "get_changelist", "list_changelists", "create_changelist",
@@ -94,6 +97,7 @@ _SERVICE_METHOD_MATRIX = [
         "list_reviews", "create_review", "vote_review",
         "transition_review_state", "obliterate_review",
     ]),
+    (SearchServices, ["search_files", "search_content", "list_directories"]),
 ]
 
 
