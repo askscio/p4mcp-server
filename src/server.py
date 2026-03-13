@@ -1,28 +1,28 @@
 import json
 import logging
 import uuid
-from typing import Annotated, Optional, List, Literal
+from typing import Annotated, List, Literal, Optional
+
+from fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field, ValidationError
-from fastmcp import FastMCP, Context
+
 from .core.config import Config
+from .core.connection import P4ConnectionManager
+from .handlers.handlers import Handlers
 from .logging.global_logging import setup_logging
 from .logging.session_logging import log_tool_call
-from .core.connection import P4ConnectionManager
-
+from .middleware.check_permission import CheckPermissionMiddleware
 from .models import models as m
 from .models import review_models as review_m
-from .handlers.handlers import Handlers
-
-from .services.file_services import FileServices
-from .services.server_services import ServerServices
-from .services.shelve_services import ShelveServices
-from .services.workspace_services import WorkspaceServices
 from .services.changelist_services import ChangelistServices
+from .services.file_services import FileServices
 from .services.job_services import JobServices
 from .services.review_services import ReviewServices
 from .services.search_services import SearchServices
-
-from .middleware.check_permission import CheckPermissionMiddleware
+from .services.server_services import ServerServices
+from .services.shelve_services import ShelveServices
+from .services.workspace_services import WorkspaceServices
 
 logger = logging.getLogger(__name__)
 
@@ -239,16 +239,17 @@ class P4MCPServer:
             _as_user_desc = (
                 "Perforce username to act as (required when impersonation is enabled)."
             )
-            _impersonation_note = (
-                "\n\nImpersonation enabled: always pass 'as_user'."
-            )
+            _impersonation_note = "\n\nImpersonation enabled: always pass 'as_user'."
         else:
-            _as_user_desc = (
-                "Impersonation target user (only use when server impersonation is enabled)."
-            )
+            _as_user_desc = "Impersonation target user (only use when server impersonation is enabled)."
             _impersonation_note = ""
 
-        @self.mcp.tool(tags=["read", "server"], description="Get server info and current user information (READ permission)" + _impersonation_note)
+        @self.mcp.tool(
+            tags=["read", "server"],
+            description="Get server info and current user information (READ permission)"
+            + _impersonation_note,
+            annotations={"readOnlyHint": True},
+        )
         async def query_server(
             action: Annotated[
                 Literal["server_info", "current_user"],
@@ -273,8 +274,11 @@ class P4MCPServer:
             return result
 
         @self.mcp.tool(
-            tags=["read", "workspaces"], enabled="workspaces" in self.toolsets,
-            description="Get workspace details, list workspaces, check type and status (READ permission)" + _impersonation_note,
+            tags=["read", "workspaces"],
+            enabled="workspaces" in self.toolsets,
+            description="Get workspace details, list workspaces, check type and status (READ permission)"
+            + _impersonation_note,
+            annotations={"readOnlyHint": True},
         )
         async def query_workspaces(
             action: Annotated[
@@ -329,7 +333,13 @@ class P4MCPServer:
             self.process_tool_logs("query_workspaces", result, ctx, as_user=as_user)
             return result
 
-        @self.mcp.tool(tags=["read", "files"], enabled="files" in self.toolsets, description="Get file content, history, info, diff, annotations (READ permission)" + _impersonation_note)
+        @self.mcp.tool(
+            tags=["read", "files"],
+            enabled="files" in self.toolsets,
+            description="Get file content, history, info, diff, annotations (READ permission)"
+            + _impersonation_note,
+            annotations={"readOnlyHint": True},
+        )
         async def query_files(
             action: Annotated[
                 Literal[
@@ -403,6 +413,7 @@ class P4MCPServer:
                 "(READ permission)"
             )
             + _impersonation_note,
+            annotations={"readOnlyHint": True},
         )
         async def search(
             action: Annotated[
@@ -509,8 +520,11 @@ class P4MCPServer:
             return result
 
         @self.mcp.tool(
-            tags=["read", "changelists"], enabled="changelists" in self.toolsets,
-            description="Get changelist details and list changelists (READ permission)" + _impersonation_note,
+            tags=["read", "changelists"],
+            enabled="changelists" in self.toolsets,
+            description="Get changelist details and list changelists (READ permission)"
+            + _impersonation_note,
+            annotations={"readOnlyHint": True},
         )
         async def query_changelists(
             action: Annotated[
@@ -587,7 +601,13 @@ class P4MCPServer:
             self.process_tool_logs("query_changelists", result, ctx, as_user=as_user)
             return result
 
-        @self.mcp.tool(tags=["read", "shelves"], enabled="shelves" in self.toolsets, description="List shelves, get shelve diff and files (READ permission)" + _impersonation_note)
+        @self.mcp.tool(
+            tags=["read", "shelves"],
+            enabled="shelves" in self.toolsets,
+            description="List shelves, get shelve diff and files (READ permission)"
+            + _impersonation_note,
+            annotations={"readOnlyHint": True},
+        )
         async def query_shelves(
             action: Annotated[
                 Literal["list", "diff", "files"],
@@ -641,7 +661,13 @@ class P4MCPServer:
             self.process_tool_logs("query_shelves", result, ctx, as_user=as_user)
             return result
 
-        @self.mcp.tool(tags=["read", "jobs"], enabled="jobs" in self.toolsets, description="Get jobs from changelist and get job details (READ permission)" + _impersonation_note)
+        @self.mcp.tool(
+            tags=["read", "jobs"],
+            enabled="jobs" in self.toolsets,
+            description="Get jobs from changelist and get job details (READ permission)"
+            + _impersonation_note,
+            annotations={"readOnlyHint": True},
+        )
         async def query_jobs(
             action: Annotated[
                 Literal["list_jobs", "get_job"], Field(description="Job query action")
@@ -694,7 +720,13 @@ class P4MCPServer:
             self.process_tool_logs("query_jobs", result, ctx, as_user=as_user)
             return result
 
-        @self.mcp.tool(tags=["read", "reviews"], enabled="reviews" in self.toolsets, description="Get review details and list reviews (READ permission). Open review - state is 'approved but pending=true' or 'needsReview' or 'needsRevision'. Closed review - state is 'approved but pending=false' or 'rejected' or 'archived'." + _impersonation_note)
+        @self.mcp.tool(
+            tags=["read", "reviews"],
+            enabled="reviews" in self.toolsets,
+            description="Get review details and list reviews (READ permission). Open review - state is 'approved but pending=true' or 'needsReview' or 'needsRevision'. Closed review - state is 'approved but pending=false' or 'rejected' or 'archived'."
+            + _impersonation_note,
+            annotations={"readOnlyHint": True},
+        )
         async def query_reviews(
             action: Annotated[
                 Literal[
@@ -799,7 +831,8 @@ class P4MCPServer:
         @self.mcp.tool(
             tags=["write", "workspaces"],
             enabled=not self.readonly and "workspaces" in self.toolsets,
-            description="Create/delete workspace, Update workspace specs, and switch active workspace (WRITE permission)" + _impersonation_note,
+            description="Create/delete workspace, Update workspace specs, and switch active workspace (WRITE permission)"
+            + _impersonation_note,
         )
         async def modify_workspaces(
             action: Annotated[
@@ -857,7 +890,8 @@ class P4MCPServer:
         @self.mcp.tool(
             tags=["write", "files"],
             enabled=not self.readonly and "files" in self.toolsets,
-            description="Add, edit, move, delete, revert, reconcile, resolve, and sync files (WRITE permission)" + _impersonation_note,
+            description="Add, edit, move, delete, revert, reconcile, resolve, and sync files (WRITE permission)"
+            + _impersonation_note,
         )
         async def modify_files(
             action: Annotated[
@@ -958,7 +992,8 @@ class P4MCPServer:
         @self.mcp.tool(
             tags=["write", "changelists"],
             enabled=not self.readonly and "changelists" in self.toolsets,
-            description="Create/delete changelists, update changelists and organize files/jobs (WRITE permission)" + _impersonation_note,
+            description="Create/delete changelists, update changelists and organize files/jobs (WRITE permission)"
+            + _impersonation_note,
         )
         async def modify_changelists(
             action: Annotated[
@@ -1025,7 +1060,8 @@ class P4MCPServer:
         @self.mcp.tool(
             tags=["write", "shelves"],
             enabled=not self.readonly and "shelves" in self.toolsets,
-            description="Create/delete, update shelves and unshelve files (WRITE permission)" + _impersonation_note,
+            description="Create/delete, update shelves and unshelve files (WRITE permission)"
+            + _impersonation_note,
         )
         async def modify_shelves(
             action: Annotated[
@@ -1136,7 +1172,8 @@ class P4MCPServer:
         @self.mcp.tool(
             tags=["write", "reviews"],
             enabled=not self.readonly and "reviews" in self.toolsets,
-            description="Create/update/delete reviews (WRITE permission)" + _impersonation_note,
+            description="Create/update/delete reviews (WRITE permission)"
+            + _impersonation_note,
         )
         async def modify_reviews(
             action: Annotated[
@@ -1400,7 +1437,8 @@ class P4MCPServer:
         @self.mcp.tool(
             tags=["write", "delete"],
             enabled=not self.readonly and len(set(self.toolsets) - {"jobs"}) > 0,
-            description="Execute any approved delete operation from any tool (WRITE permission)" + _impersonation_note,
+            description="Execute any approved delete operation from any tool (WRITE permission)"
+            + _impersonation_note,
         )
         async def execute_delete(
             source_tool: Annotated[
