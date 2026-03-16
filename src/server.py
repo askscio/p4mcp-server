@@ -244,11 +244,14 @@ class P4MCPServer:
             _as_user_desc = "Impersonation target user (only use when server impersonation is enabled)."
             _impersonation_note = ""
 
+        _tool_meta = {"_glean_internal_meta": {"sendUserEmailHeader": True}}
+
         @self.mcp.tool(
             tags=["read", "server"],
             description="Get server info and current user information (READ permission)"
             + _impersonation_note,
             annotations={"readOnlyHint": True},
+            meta=_tool_meta,
         )
         async def query_server(
             action: Annotated[
@@ -279,6 +282,7 @@ class P4MCPServer:
             description="Get workspace details, list workspaces, check type and status (READ permission)"
             + _impersonation_note,
             annotations={"readOnlyHint": True},
+            meta=_tool_meta,
         )
         async def query_workspaces(
             action: Annotated[
@@ -339,6 +343,7 @@ class P4MCPServer:
             description="Get file content, history, info, diff, annotations (READ permission)"
             + _impersonation_note,
             annotations={"readOnlyHint": True},
+            meta=_tool_meta,
         )
         async def query_files(
             action: Annotated[
@@ -414,6 +419,7 @@ class P4MCPServer:
             )
             + _impersonation_note,
             annotations={"readOnlyHint": True},
+            meta=_tool_meta,
         )
         async def search(
             action: Annotated[
@@ -525,6 +531,7 @@ class P4MCPServer:
             description="Get changelist details and list changelists (READ permission)"
             + _impersonation_note,
             annotations={"readOnlyHint": True},
+            meta=_tool_meta,
         )
         async def query_changelists(
             action: Annotated[
@@ -607,6 +614,7 @@ class P4MCPServer:
             description="List shelves, get shelve diff and files (READ permission)"
             + _impersonation_note,
             annotations={"readOnlyHint": True},
+            meta=_tool_meta,
         )
         async def query_shelves(
             action: Annotated[
@@ -667,6 +675,7 @@ class P4MCPServer:
             description="Get jobs from changelist and get job details (READ permission)"
             + _impersonation_note,
             annotations={"readOnlyHint": True},
+            meta=_tool_meta,
         )
         async def query_jobs(
             action: Annotated[
@@ -726,6 +735,7 @@ class P4MCPServer:
             description="Get review details and list reviews (READ permission). Open review - state is 'approved but pending=true' or 'needsReview' or 'needsRevision'. Closed review - state is 'approved but pending=false' or 'rejected' or 'archived'."
             + _impersonation_note,
             annotations={"readOnlyHint": True},
+            meta=_tool_meta,
         )
         async def query_reviews(
             action: Annotated[
@@ -833,6 +843,7 @@ class P4MCPServer:
             enabled=not self.readonly and "workspaces" in self.toolsets,
             description="Create/delete workspace, Update workspace specs, and switch active workspace (WRITE permission)"
             + _impersonation_note,
+            meta=_tool_meta,
         )
         async def modify_workspaces(
             action: Annotated[
@@ -892,6 +903,7 @@ class P4MCPServer:
             enabled=not self.readonly and "files" in self.toolsets,
             description="Add, edit, move, delete, revert, reconcile, resolve, and sync files (WRITE permission)"
             + _impersonation_note,
+            meta=_tool_meta,
         )
         async def modify_files(
             action: Annotated[
@@ -994,6 +1006,7 @@ class P4MCPServer:
             enabled=not self.readonly and "changelists" in self.toolsets,
             description="Create/delete changelists, update changelists and organize files/jobs (WRITE permission)"
             + _impersonation_note,
+            meta=_tool_meta,
         )
         async def modify_changelists(
             action: Annotated[
@@ -1062,6 +1075,7 @@ class P4MCPServer:
             enabled=not self.readonly and "shelves" in self.toolsets,
             description="Create/delete, update shelves and unshelve files (WRITE permission)"
             + _impersonation_note,
+            meta=_tool_meta,
         )
         async def modify_shelves(
             action: Annotated[
@@ -1129,6 +1143,7 @@ class P4MCPServer:
             tags=["write", "jobs"],
             enabled=not self.readonly and "jobs" in self.toolsets,
             description="Link or unlink jobs (WRITE permission)" + _impersonation_note,
+            meta=_tool_meta,
         )
         async def modify_jobs(
             action: Annotated[
@@ -1174,6 +1189,7 @@ class P4MCPServer:
             enabled=not self.readonly and "reviews" in self.toolsets,
             description="Create/update/delete reviews (WRITE permission)"
             + _impersonation_note,
+            meta=_tool_meta,
         )
         async def modify_reviews(
             action: Annotated[
@@ -1439,6 +1455,7 @@ class P4MCPServer:
             enabled=not self.readonly and len(set(self.toolsets) - {"jobs"}) > 0,
             description="Execute any approved delete operation from any tool (WRITE permission)"
             + _impersonation_note,
+            meta=_tool_meta,
         )
         async def execute_delete(
             source_tool: Annotated[
