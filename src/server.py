@@ -460,6 +460,8 @@ class P4MCPServer:
                     default=None,
                     description=(
                         "Only for search_content: literal text or regex to grep. "
+                        "The provided pattern is passed to the P4 CLI as the regex "
+                        "pattern for p4 grep -e. "
                         "This is exact text matching, not semantic/natural-language search."
                     ),
                     examples=["TODO", "def main", "DMA_BURST_SIZE", "QC-[0-9]+"],
