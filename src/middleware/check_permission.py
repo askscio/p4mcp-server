@@ -1,4 +1,5 @@
 from fastmcp.server.middleware import Middleware, MiddlewareContext
+from fastmcp.server.dependencies import get_http_headers
 from fastmcp.exceptions import ToolError
 import logging
 from ..core.config import Config
@@ -178,6 +179,15 @@ class CheckPermissionMiddleware(Middleware):
                 raise ImpersonationPolicyError(
                     f"as_user is required for tool '{tool_name}' when impersonation is enabled",
                     ImpersonationReasonCode.AS_USER_REQUIRED,
+                )
+            # Verify as_user matches Glean-User-Email header (HTTP transport only)
+            headers = get_http_headers()
+            user_email = headers.get("glean-user-email")
+            if user_email is not None and as_user != user_email:
+                raise ImpersonationPolicyError(
+                    f"as_user '{as_user}' does not match authenticated user "
+                    f"from Glean-User-Email header (tool '{tool_name}')",
+                    ImpersonationReasonCode.AS_USER_MISMATCH,
                 )
             return as_user
         else:

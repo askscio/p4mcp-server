@@ -8,6 +8,8 @@ Covers plan test cases:
 9. Non-impersonation behavior remains unchanged when feature is disabled and no as_user supplied.
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from src.core.config import Config
@@ -67,21 +69,44 @@ class TestImpersonationPolicyEnabled:
             mw._check_impersonation_policy("query_server", {}, {})
         assert exc_info.value.reason_code == ImpersonationReasonCode.AS_USER_REQUIRED
 
-    def test_as_user_provided_returns_user(self, impersonation_config):
-        """as_user provided when enabled => returns the user."""
+    @patch(
+        "src.middleware.check_permission.get_http_headers",
+        return_value={"glean-user-email": "alice"},
+    )
+    def test_as_user_provided_returns_user(self, _mock_headers, impersonation_config):
+        """as_user provided when enabled => returns the user (header matches)."""
         mw = _make_middleware(impersonation_config)
         result = mw._check_impersonation_policy(
             "query_server", {}, {"as_user": "alice"}
         )
         assert result == "alice"
 
-    def test_as_user_stripped(self, impersonation_config):
-        """Leading/trailing whitespace is stripped from as_user."""
+    @patch(
+        "src.middleware.check_permission.get_http_headers",
+        return_value={},
+    )
+    def test_as_user_stripped(self, _mock_headers, impersonation_config):
+        """Leading/trailing whitespace is stripped; no header => check skipped."""
         mw = _make_middleware(impersonation_config)
         result = mw._check_impersonation_policy(
             "query_server", {}, {"as_user": "  alice  "}
         )
         assert result == "alice"
+
+    @patch(
+        "src.middleware.check_permission.get_http_headers",
+        return_value={"glean-user-email": "alice@company.com"},
+    )
+    def test_as_user_mismatch_with_glean_user_email_header(
+        self, _mock_headers, impersonation_config
+    ):
+        """as_user does not match Glean-User-Email header => AS_USER_MISMATCH."""
+        mw = _make_middleware(impersonation_config)
+        with pytest.raises(ImpersonationPolicyError) as exc_info:
+            mw._check_impersonation_policy(
+                "query_server", {}, {"as_user": "bob"}
+            )
+        assert exc_info.value.reason_code == ImpersonationReasonCode.AS_USER_MISMATCH
 
 
 class TestAsUserWhitespaceValidation:
