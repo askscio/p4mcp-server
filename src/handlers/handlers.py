@@ -235,6 +235,7 @@ class Handlers:
                 case_insensitive=params.case_insensitive,
                 show_line_numbers=params.show_line_numbers,
                 filenames_only=params.filenames_only,
+                context_lines=params.context_lines,
                 effective_user=effective_user,
             )
         elif params.action == "search_dirs":

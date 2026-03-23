@@ -72,9 +72,9 @@ class SearchServices:
                 return {"status": "success", "message": files}
             except P4Exception as e:
                 logger.error(f"P4Error: Failed to search files: {e}")
-                if "no such file(s)" in str(e) and _looks_like_directory_without_wildcard(
-                    depot_path
-                ):
+                if "no such file(s)" in str(
+                    e
+                ) and _looks_like_directory_without_wildcard(depot_path):
                     return {
                         "status": "error",
                         "message": (
@@ -91,6 +91,7 @@ class SearchServices:
         case_insensitive: bool = False,
         show_line_numbers: bool = True,
         filenames_only: bool = False,
+        context_lines: int = 1,
         effective_user: str | None = None,
     ) -> dict:
         """Search file content using p4 grep."""
@@ -106,6 +107,8 @@ class SearchServices:
                     args.append("-i")
                 if filenames_only:
                     args.append("-l")
+                elif context_lines > 0:
+                    args.extend(["-C", str(context_lines)])
                 args.extend(["-e", search_text, depot_path])
 
                 original_tagged = p4.tagged

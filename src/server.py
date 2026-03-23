@@ -199,6 +199,7 @@ class P4MCPServer:
         show_line_numbers: bool,
         filenames_only: bool,
         max_results: int,
+        context_lines: int = 1,
     ) -> Optional[dict]:
         """Validate search params and normalize user-facing validation errors."""
         if action == "search_dirs" and "..." in depot_path:
@@ -219,6 +220,7 @@ class P4MCPServer:
                 show_line_numbers=show_line_numbers,
                 filenames_only=filenames_only,
                 max_results=max_results,
+                context_lines=context_lines,
             )
             return None
         except ValidationError as exc:
@@ -484,6 +486,19 @@ class P4MCPServer:
                     description="Only for search_content: return only matching file paths",
                 ),
             ] = False,
+            context_lines: Annotated[
+                int,
+                Field(
+                    default=1,
+                    ge=0,
+                    le=5,
+                    description=(
+                        "Only for search_content: number of context lines to show "
+                        "above and below each match (0-5, default 1). "
+                        "Maximum value is 5. Ignored when filenames_only is true."
+                    ),
+                ),
+            ] = 1,
             max_results: Annotated[
                 int,
                 Field(
@@ -506,6 +521,7 @@ class P4MCPServer:
                 show_line_numbers=show_line_numbers,
                 filenames_only=filenames_only,
                 max_results=max_results,
+                context_lines=context_lines,
             )
             if validation_error:
                 self.process_tool_logs("search", validation_error, ctx, as_user=as_user)
@@ -518,6 +534,7 @@ class P4MCPServer:
                 show_line_numbers=show_line_numbers,
                 filenames_only=filenames_only,
                 max_results=max_results,
+                context_lines=context_lines,
             )
             result = await self.handlers.handle(
                 "query", "search", params, effective_user=as_user

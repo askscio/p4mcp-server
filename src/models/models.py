@@ -373,6 +373,16 @@ class SearchParams(PaginatedParams):
         default=False,
         description="Only for search_content: return only matching file paths",
     )
+    context_lines: int = Field(
+        default=1,
+        ge=0,
+        le=5,
+        description=(
+            "Only for search_content: number of context lines to include above and "
+            "below each match (0-5). Maps to p4 grep -C flag. "
+            "Ignored when filenames_only is true."
+        ),
+    )
 
     @model_validator(mode='after')
     def validate_search_params(self):

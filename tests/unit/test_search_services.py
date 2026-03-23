@@ -29,21 +29,39 @@ class TestSearchServices:
     async def test_search_files_filters_to_expected_fields(self):
         p4 = MagicMock()
         p4.run.return_value = [
-            {"depotFile": "//depot/a.py", "rev": "3", "type": "text", "change": "17", "extra": "x"},
+            {
+                "depotFile": "//depot/a.py",
+                "rev": "3",
+                "type": "text",
+                "change": "17",
+                "extra": "x",
+            },
             {"depotFile": "//depot/b.py", "rev": "5", "type": "binary", "change": "20"},
             "unexpected",
         ]
         service, manager = _service_with_p4(p4)
 
-        result = await service.search_files("//depot/.../*.py", max_results=2, effective_user="alice")
+        result = await service.search_files(
+            "//depot/.../*.py", max_results=2, effective_user="alice"
+        )
 
         manager.get_connection.assert_called_once_with(effective_user="alice")
         p4.run.assert_called_once_with("files", "-m2", "//depot/.../*.py")
         assert result == {
             "status": "success",
             "message": [
-                {"depotFile": "//depot/a.py", "rev": "3", "type": "text", "change": "17"},
-                {"depotFile": "//depot/b.py", "rev": "5", "type": "binary", "change": "20"},
+                {
+                    "depotFile": "//depot/a.py",
+                    "rev": "3",
+                    "type": "text",
+                    "change": "17",
+                },
+                {
+                    "depotFile": "//depot/b.py",
+                    "rev": "5",
+                    "type": "binary",
+                    "change": "20",
+                },
             ],
         }
 
@@ -65,6 +83,7 @@ class TestSearchServices:
             case_insensitive=True,
             show_line_numbers=True,
             filenames_only=False,
+            context_lines=0,
             effective_user="bob",
         )
 
@@ -88,7 +107,9 @@ class TestSearchServices:
         p4.run.side_effect = P4Exception("no file(s) to match")
         service, _ = _service_with_p4(p4)
 
-        result = await service.search_content(search_text="MISSING", depot_path="//depot/...")
+        result = await service.search_content(
+            search_text="MISSING", depot_path="//depot/..."
+        )
 
         assert result == {"status": "success", "message": [], "truncated": False}
 
@@ -153,3 +174,75 @@ class TestSearchServices:
 
         assert result["status"] == "error"
         assert "Try '//depot/bluetooth/...'" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_search_content_includes_context_lines_flag(self):
+        """context_lines > 0 should add -C <n> to grep args."""
+        p4 = MagicMock()
+        p4.tagged = True
+        p4.run.return_value = [
+            "//depot/a.py#3:10: before line",
+            "//depot/a.py#3:11: TODO: fix this",
+            "//depot/a.py#3:12: after line",
+        ]
+        service, _ = _service_with_p4(p4)
+
+        await service.search_content(
+            search_text="TODO",
+            depot_path="//depot/...",
+            context_lines=2,
+        )
+
+        p4.run.assert_called_once_with(
+            "grep", "-n", "-C", "2", "-e", "TODO", "//depot/..."
+        )
+
+    @pytest.mark.asyncio
+    async def test_search_content_default_context_lines(self):
+        """Default context_lines=1 should add -C 1."""
+        p4 = MagicMock()
+        p4.tagged = True
+        p4.run.return_value = []
+        service, _ = _service_with_p4(p4)
+
+        await service.search_content(
+            search_text="TODO",
+            depot_path="//depot/...",
+        )
+
+        p4.run.assert_called_once_with(
+            "grep", "-n", "-C", "1", "-e", "TODO", "//depot/..."
+        )
+
+    @pytest.mark.asyncio
+    async def test_search_content_context_lines_zero_omits_flag(self):
+        """context_lines=0 should not add -C flag."""
+        p4 = MagicMock()
+        p4.tagged = True
+        p4.run.return_value = []
+        service, _ = _service_with_p4(p4)
+
+        await service.search_content(
+            search_text="TODO",
+            depot_path="//depot/...",
+            context_lines=0,
+        )
+
+        p4.run.assert_called_once_with("grep", "-n", "-e", "TODO", "//depot/...")
+
+    @pytest.mark.asyncio
+    async def test_search_content_filenames_only_ignores_context_lines(self):
+        """When filenames_only=True, -C flag should not be added even if context_lines > 0."""
+        p4 = MagicMock()
+        p4.tagged = True
+        p4.run.return_value = ["//depot/a.py#3"]
+        service, _ = _service_with_p4(p4)
+
+        await service.search_content(
+            search_text="TODO",
+            depot_path="//depot/...",
+            filenames_only=True,
+            context_lines=3,
+        )
+
+        p4.run.assert_called_once_with("grep", "-n", "-l", "-e", "TODO", "//depot/...")

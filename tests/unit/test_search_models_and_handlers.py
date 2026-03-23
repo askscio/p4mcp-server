@@ -31,18 +31,59 @@ class TestSearchParams:
         params = m.SearchParams(action="search_files", depot_path="//depot/...")
         assert params.search_text is None
 
+    def test_context_lines_defaults_to_1(self):
+        params = m.SearchParams(
+            action="search_content", depot_path="//depot/...", search_text="TODO"
+        )
+        assert params.context_lines == 1
+
+    def test_context_lines_accepts_valid_range(self):
+        for val in [0, 1, 3, 5]:
+            params = m.SearchParams(
+                action="search_content",
+                depot_path="//depot/...",
+                search_text="TODO",
+                context_lines=val,
+            )
+            assert params.context_lines == val
+
+    def test_context_lines_rejects_above_max(self):
+        with pytest.raises(ValidationError):
+            m.SearchParams(
+                action="search_content",
+                depot_path="//depot/...",
+                search_text="TODO",
+                context_lines=6,
+            )
+
+    def test_context_lines_rejects_negative(self):
+        with pytest.raises(ValidationError):
+            m.SearchParams(
+                action="search_content",
+                depot_path="//depot/...",
+                search_text="TODO",
+                context_lines=-1,
+            )
+
 
 class TestSearchHandler:
     @pytest.mark.asyncio
     async def test_dispatches_search_files(self):
         search_services = MagicMock()
         search_services.search_files = AsyncMock(
-            return_value={"status": "success", "message": [{"depotFile": "//depot/a.txt"}]}
+            return_value={
+                "status": "success",
+                "message": [{"depotFile": "//depot/a.txt"}],
+            }
         )
         handlers = _make_handlers(search_services)
 
-        params = SimpleNamespace(action="search_files", depot_path="//depot/...", max_results=25)
-        result = await handlers.handle("query", "search", params, effective_user="alice")
+        params = SimpleNamespace(
+            action="search_files", depot_path="//depot/...", max_results=25
+        )
+        result = await handlers.handle(
+            "query", "search", params, effective_user="alice"
+        )
 
         search_services.search_files.assert_awaited_once_with(
             depot_path="//depot/...", max_results=25, effective_user="alice"
@@ -65,12 +106,49 @@ class TestSearchHandler:
         )
         handlers = _make_handlers(search_services)
 
-        params = SimpleNamespace(action="search_dirs", depot_path="//depot/*", max_results=1)
+        params = SimpleNamespace(
+            action="search_dirs", depot_path="//depot/*", max_results=1
+        )
         result = await handlers.handle("query", "search", params, effective_user=None)
 
         assert result["status"] == "success"
         assert result["action"] == "search_dirs"
         assert result["truncated"] is True
+
+    @pytest.mark.asyncio
+    async def test_dispatches_search_content_with_context_lines(self):
+        search_services = MagicMock()
+        search_services.search_content = AsyncMock(
+            return_value={"status": "success", "message": [], "truncated": False}
+        )
+        handlers = _make_handlers(search_services)
+
+        params = SimpleNamespace(
+            action="search_content",
+            depot_path="//depot/...",
+            search_text="TODO",
+            max_results=50,
+            case_insensitive=False,
+            show_line_numbers=True,
+            filenames_only=False,
+            context_lines=3,
+        )
+        result = await handlers.handle(
+            "query", "search", params, effective_user="alice"
+        )
+
+        search_services.search_content.assert_awaited_once_with(
+            search_text="TODO",
+            depot_path="//depot/...",
+            max_results=50,
+            case_insensitive=False,
+            show_line_numbers=True,
+            filenames_only=False,
+            context_lines=3,
+            effective_user="alice",
+        )
+        assert result["status"] == "success"
+        assert result["action"] == "search_content"
 
 
 class TestSearchToolValidation:
