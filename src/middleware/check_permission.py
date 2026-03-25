@@ -183,12 +183,33 @@ class CheckPermissionMiddleware(Middleware):
             # Verify as_user matches Glean-User-Email header (HTTP transport only)
             headers = get_http_headers()
             user_email = headers.get("glean-user-email")
-            if user_email is not None and as_user != user_email:
-                raise ImpersonationPolicyError(
-                    f"as_user '{as_user}' does not match authenticated user "
-                    f"from Glean-User-Email header (tool '{tool_name}')",
-                    ImpersonationReasonCode.AS_USER_MISMATCH,
-                )
+            if user_email is not None:
+                # Normalize both sides for comparison: if as_user is an email
+                # it must match the header exactly (case-insensitive); if it is
+                # a plain username it must match the local-part of the header.
+                as_user_lower = as_user.lower()
+                header_lower = user_email.lower()
+                if "@" in as_user:
+                    if as_user_lower != header_lower:
+                        raise ImpersonationPolicyError(
+                            f"as_user '{as_user}' does not match authenticated user "
+                            f"from Glean-User-Email header (tool '{tool_name}')",
+                            ImpersonationReasonCode.AS_USER_MISMATCH,
+                        )
+                else:
+                    # as_user is a plain username – compare against header local-part
+                    header_local = header_lower.split("@", 1)[0]
+                    if as_user_lower != header_local:
+                        raise ImpersonationPolicyError(
+                            f"as_user '{as_user}' does not match authenticated user "
+                            f"from Glean-User-Email header (tool '{tool_name}')",
+                            ImpersonationReasonCode.AS_USER_MISMATCH,
+                        )
+
+            # Normalize email-style as_user to username (local-part before @).
+            if "@" in as_user:
+                as_user = as_user.split("@", 1)[0]
+
             return as_user
         else:
             # Impersonation disabled – providing as_user is a hard error.
@@ -219,7 +240,17 @@ class CheckPermissionMiddleware(Middleware):
                     context.message.arguments if context.message.arguments else {}
                 )
                 try:
-                    self._check_impersonation_policy(tool_name, tool_info, arguments)
+                    effective_user = self._check_impersonation_policy(
+                        tool_name, tool_info, arguments
+                    )
+                    # Write normalized identity back so downstream handlers
+                    # receive a plain Perforce username even when the caller
+                    # supplied an email address.
+                    if (
+                        effective_user is not None
+                        and context.message.arguments is not None
+                    ):
+                        context.message.arguments["as_user"] = effective_user
                 except ImpersonationPolicyError as ipe:
                     logger.warning(
                         "Impersonation policy denied: tool=%s reason_code=%s msg=%s",
