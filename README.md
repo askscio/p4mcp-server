@@ -521,6 +521,23 @@ When `MCP_IMPERSONATION_ENABLED=true`, every P4-backed tool call **must** includ
 `as_user` to identify the effective user. The server will fail fast at startup if
 impersonation is enabled but `P4USER` is not set.
 
+#### Security level compatibility
+
+Perforce servers with security level >= 3 require ticket-based authentication
+(`p4 login`); plaintext passwords in `P4PASSWD` are rejected.  At level 4, SSL
+is additionally mandatory for all connections.
+
+The MCP server handles this automatically: before each impersonated request, the
+superuser issues a ticket on behalf of the target user (`p4 login <as_user>`).
+No manual per-user ticket setup is required — only the superuser's credentials
+(`P4USER` / `P4PASSWD`) must be configured.
+
+You can check your server's security level with:
+
+```bash
+p4 configure show security
+```
+
 ### `as_user` identity format
 
 `as_user` accepts either a **Perforce username** or an **email address**:

@@ -83,9 +83,38 @@ Removed from scope:
 ### Connection model
 
 - Use per-request fresh `P4` connection.
-- Authenticate using existing superuser credentials/ticket flow.
 - Set `p4.user = as_user` before command execution.
 - Always cleanup connection on success/failure.
+
+#### Security level and ticket-based auth
+
+Perforce servers with security level >= 3 (configurable via `p4 configure set
+security=N`) require **ticket-based authentication** — plaintext passwords in
+`P4PASSWD` are rejected.  At level 4, SSL is additionally mandatory.
+
+| Level | Auth requirement |
+|-------|-----------------|
+| 0–2   | Password (plaintext or strong) accepted |
+| 3     | Ticket required (`p4 login`); plaintext `P4PASSWD` rejected |
+| 4     | Ticket required + SSL mandatory for all connections |
+
+**Impact on impersonation:** simply setting `p4.user = <effective_user>` and
+connecting is insufficient at level >= 3 because the impersonated user has no
+ticket of their own.  The server rejects all authenticated commands (everything
+except `p4 info`) with `Perforce password (P4PASSWD) invalid or unset.`
+
+**Solution:** before each impersonated request, the superuser authenticates and
+issues a ticket on behalf of the target user:
+
+1. Connect a temporary `P4` object as the configured superuser.
+2. `p4.run_login()` — authenticate the superuser.
+3. `p4.run("login", effective_user)` — superuser issues a ticket for the
+   target user (stored in the shared ticket file).
+4. Disconnect the temporary object.
+5. Create the per-request `P4` with `p4.user = effective_user`; the ticket
+   from step 3 is now available in the ticket file.
+
+This is implemented in `P4ConnectionManager._login_for_user()`.
 
 ### Permission and property evaluation
 
@@ -137,6 +166,13 @@ Removed from scope:
 - Use fresh request-scoped `P4` object per call.
 - Set `p4.user` from effective user for impersonated calls.
 - Add helper for actor resolution from authenticated base state.
+- Add `_login_for_user(effective_user)` — connects as the configured
+  superuser, authenticates, runs `p4 login <effective_user>` to issue a
+  ticket for the target user, then disconnects.  Called before every
+  impersonated request to ensure the ticket file contains a valid entry
+  for the effective user (required at security level >= 3).
+- Remove `login -s` check from the impersonation path — the impersonated
+  user's ticket is issued by `_login_for_user`, not pre-existing.
 
 ### 4) Middleware policy enforcement
 

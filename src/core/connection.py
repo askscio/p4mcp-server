@@ -263,6 +263,39 @@ class P4ConnectionManager:
 
         return p4
 
+    def _login_for_user(self, effective_user: str) -> None:
+        """Use the superuser's credentials to issue a ticket for *effective_user*.
+
+        At security level >= 3, every user needs a valid ticket.  A superuser
+        can create one on behalf of another user with ``p4 login <user>``.
+        This method connects as the configured superuser, issues the ticket,
+        and disconnects — leaving the ticket in the shared ticket file for the
+        subsequent impersonated connection to pick up.
+        """
+        p4 = P4(cwd=os.getcwd())
+        if self.config.p4port:
+            p4.port = self.config.p4port
+        p4.user = self.config.p4user or self._session.p4.user
+        p4.password = os.environ.get("P4PASSWD", "")
+        p4.prog = "P4-MCP-Server"
+        p4.version = __version__
+
+        try:
+            p4.connect()
+            p4.run_login()  # authenticate the superuser first
+            p4.run("login", effective_user)  # issue ticket for target user
+            logger.info(
+                "Issued ticket for impersonated user '%s' via superuser '%s'",
+                effective_user,
+                p4.user,
+            )
+        finally:
+            try:
+                if p4.connected():
+                    p4.disconnect()
+            except Exception:
+                pass
+
     @asynccontextmanager
     async def get_connection(self, effective_user: str | None = None):
         """Get P4 connection context manager.
@@ -275,12 +308,13 @@ class P4ConnectionManager:
         """
         if effective_user is not None:
             # ---- Per-request fresh connection for impersonation ----
+            # At security level >= 3 the impersonated user needs a ticket.
+            # Use the superuser to issue one before connecting as that user.
+            self._login_for_user(effective_user)
+
             p4 = self._create_fresh_p4(effective_user)
             try:
                 p4.connect()
-
-                if p4.ticket_file:
-                    p4.run("login", "-s")
 
                 yield p4
 
