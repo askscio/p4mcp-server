@@ -103,18 +103,18 @@ connecting is insufficient at level >= 3 because the impersonated user has no
 ticket of their own.  The server rejects all authenticated commands (everything
 except `p4 info`) with `Perforce password (P4PASSWD) invalid or unset.`
 
-**Solution:** before each impersonated request, the superuser authenticates and
-issues a ticket on behalf of the target user:
+**Solution:** before each impersonated request, the server uses a pre-existing
+admin ticket and issues a ticket on behalf of the target user:
 
 1. Connect a temporary `P4` object as the configured superuser.
-2. `p4.run_login()` — authenticate the superuser.
-3. `p4.run("login", effective_user)` — superuser issues a ticket for the
+2. Treat `P4PASSWD` as the opaque admin ticket; no admin login is performed.
+3. `p4.run("login", effective_user)` — admin issues a ticket for the
    target user (stored in the shared ticket file).
 4. Disconnect the temporary object.
 5. Create the per-request `P4` with `p4.user = effective_user`; the ticket
    from step 3 is now available in the ticket file.
 
-This is implemented in `P4ConnectionManager._login_for_user()`.
+This is implemented in `P4ConnectionManager._issue_ticket_for_user()`.
 
 ### Permission and property evaluation
 
@@ -166,13 +166,13 @@ This is implemented in `P4ConnectionManager._login_for_user()`.
 - Use fresh request-scoped `P4` object per call.
 - Set `p4.user` from effective user for impersonated calls.
 - Add helper for actor resolution from authenticated base state.
-- Add `_login_for_user(effective_user)` — connects as the configured
-  superuser, authenticates, runs `p4 login <effective_user>` to issue a
-  ticket for the target user, then disconnects.  Called before every
-  impersonated request to ensure the ticket file contains a valid entry
-  for the effective user (required at security level >= 3).
+- Add `_issue_ticket_for_user(effective_user)` — connects as the configured
+  superuser using the pre-created admin ticket in `P4PASSWD`, runs `p4 login
+  <effective_user>` to issue a ticket for the target user, then disconnects.
+  Called before every impersonated request to ensure the ticket file contains
+  a valid entry for the effective user (required at security level >= 3).
 - Remove `login -s` check from the impersonation path — the impersonated
-  user's ticket is issued by `_login_for_user`, not pre-existing.
+  user's ticket is issued by `_issue_ticket_for_user`, not pre-existing.
 
 ### 4) Middleware policy enforcement
 

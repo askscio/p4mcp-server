@@ -161,10 +161,21 @@ Using P4 tickets:
 
 > **Note:** Use the full path to your tickets file (not `~`). After running `p4 login`, restart the MCP server to pick up the new ticket.
 
-Using a password:
+Using a password for a regular (non-impersonated) server:
 ```bash
 -e P4PASSWD="your_password"
 ```
+
+For impersonation, create the admin ticket before starting the container and
+share it as `P4PASSWD` (or share the P4 ticket file). `P4PASSWD` is the ticket,
+not a plaintext password:
+```bash
+-e P4PASSWD="your_pre_created_admin_ticket"
+-v /Users/your_username/.p4tickets:/root/.p4tickets
+```
+
+The ticket-file mount must be writable when the server issues target-user
+tickets. The MCP server does not run the admin login command.
 
 **Workspace Host Restrictions**
 
@@ -523,14 +534,24 @@ impersonation is enabled but `P4USER` is not set.
 
 #### Security level compatibility
 
-Perforce servers with security level >= 3 require ticket-based authentication
-(`p4 login`); plaintext passwords in `P4PASSWD` are rejected.  At level 4, SSL
-is additionally mandatory for all connections.
+Perforce servers with security level >= 3 require ticket-based authentication.
+At level 4, SSL is additionally mandatory for all connections.
 
-The MCP server handles this automatically: before each impersonated request, the
-superuser issues a ticket on behalf of the target user (`p4 login <as_user>`).
-No manual per-user ticket setup is required — only the superuser's credentials
-(`P4USER` / `P4PASSWD`) must be configured.
+For impersonation, `P4PASSWD` must contain a pre-created, currently valid
+ticket for the admin account in `P4USER`; it must not contain the admin's
+plaintext password. The admin ticket must be available before the MCP server
+starts handling requests, either in `P4PASSWD` or through the shared P4 ticket
+file configured by the P4 environment.
+
+On each impersonated request, the server uses that existing admin ticket to
+connect and directly runs `p4 login <as_user>` to issue a target-user ticket.
+It never runs an admin `p4 login` command and does not fall back to password or
+SSO authentication. The target ticket is stored in the shared ticket file for
+the fresh request connection to use. An expired or missing admin ticket is
+reported as the Perforce error from that request.
+
+The existing `p4 login -s` checks only validate ticket status; they do not
+authenticate the admin account.
 
 You can check your server's security level with:
 

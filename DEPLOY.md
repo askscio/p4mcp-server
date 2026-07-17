@@ -27,6 +27,7 @@ The server runs as a Docker container with these settings:
 - **Source repo:** `github.com/askscio/p4mcp-server` branch `king-11/search-tools`
 - **P4PORT:** `ssl:34.31.24.93:1666` (perforce-helix-core VM public IP)
 - **P4USER:** `steve.smith`
+- **P4PASSWD:** a pre-created admin ticket for `steve.smith` (never a plaintext password)
 - **MCP_IMPERSONATION_ENABLED:** `true`
 - **Flags:** `--readonly --transport http --port 8000`
 - **Restart policy:** `unless-stopped`
@@ -63,7 +64,8 @@ sudo docker run -d \
   -v /opt/p4data:/root \
   -e P4PORT=ssl:34.31.24.93:1666 \
   -e P4USER=$P4USER \
-  -e P4PASSWD=$P4PASSWD \
+  -e P4PASSWD="$P4_ADMIN_TICKET" \
+  -e P4TICKETS=/root/.p4tickets \
   -e MCP_IMPERSONATION_ENABLED=true \
   -e LOG_LEVEL=INFO \
   p4-mcp-server:latest \
@@ -73,12 +75,20 @@ sudo docker run -d \
 ## P4 Trust and Login
 
 Trust and ticket files are persisted at `/opt/p4data/` on the host via the volume mount.
-They survive container rebuilds. If you need to re-establish trust (e.g. after a P4 server cert change):
+They survive container rebuilds. Before the MCP server handles requests, obtain
+an admin ticket for `P4USER` through the approved Perforce administration flow
+and provide it as `P4_ADMIN_TICKET` to the container. `P4PASSWD` is treated as
+that opaque ticket, not as a password. The shared ticket file must be writable
+because the server stores target-user tickets there.
+
+If you need to re-establish trust (e.g. after a P4 server cert change):
 
 ```bash
 sudo docker exec p4-mcp-server p4 -p ssl:34.31.24.93:1666 trust -y
-echo $P4PASSWD | sudo docker exec -i p4-mcp-server p4 -p ssl:34.31.24.93:1666 -u steve.smith login
 ```
+
+The MCP server does not perform an admin `p4 login`; an expired or missing
+admin ticket fails the first impersonated request with the Perforce error.
 
 ## Common Operations
 

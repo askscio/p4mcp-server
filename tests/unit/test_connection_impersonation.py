@@ -52,6 +52,11 @@ def _make_fake_p4(user="test"):
 
 
 class TestGetConnectionImpersonation:
+    @pytest.fixture(autouse=True)
+    def skip_ticket_issuance(self, monkeypatch):
+        """Keep connection-context tests focused on the request connection."""
+        monkeypatch.setattr(P4ConnectionManager, "_issue_ticket_for_user", MagicMock())
+
     @pytest.mark.asyncio
     async def test_yields_p4_with_user_set(self, base_config):
         """Per-request P4 should have p4.user = effective_user."""
@@ -138,6 +143,65 @@ class TestGetConnectionImpersonation:
 
         async with manager.get_connection(effective_user=None) as p4:
             assert p4 is fake_p4
+
+
+class TestIssueTicketForUser:
+    def _make_manager(self, config):
+        manager = P4ConnectionManager.__new__(P4ConnectionManager)
+        manager.config = config
+        manager._session = MagicMock()
+        manager._session.p4.user = config.p4user
+        return manager
+
+    def test_uses_existing_admin_ticket_without_authenticating(self, base_config, monkeypatch):
+        """The admin ticket is used directly to issue the target ticket."""
+        manager = self._make_manager(base_config)
+        admin_p4 = MagicMock()
+        admin_p4.connected.return_value = True
+        monkeypatch.setenv("P4PASSWD", "admin-ticket")
+
+        with patch("src.core.connection.P4", return_value=admin_p4):
+            manager._issue_ticket_for_user("alice")
+
+        assert admin_p4.password == "admin-ticket"
+        admin_p4.connect.assert_called_once_with()
+        admin_p4.run_login.assert_not_called()
+        admin_p4.run.assert_called_once_with("login", "alice")
+        admin_p4.disconnect.assert_called_once_with()
+
+    def test_disconnects_admin_connection_when_ticket_issue_fails(self, base_config, monkeypatch):
+        """The temporary admin connection is cleaned up on Perforce errors."""
+        manager = self._make_manager(base_config)
+        admin_p4 = MagicMock()
+        admin_p4.connected.return_value = True
+        admin_p4.run.side_effect = P4Exception("ticket expired")
+        monkeypatch.setenv("P4PASSWD", "expired-admin-ticket")
+
+        with patch("src.core.connection.P4", return_value=admin_p4):
+            with pytest.raises(P4Exception, match="ticket expired"):
+                manager._issue_ticket_for_user("alice")
+
+        admin_p4.connect.assert_called_once_with()
+        admin_p4.run_login.assert_not_called()
+        admin_p4.run.assert_called_once_with("login", "alice")
+        admin_p4.disconnect.assert_called_once_with()
+
+    def test_missing_admin_ticket_propagates_without_authentication(self, base_config, monkeypatch):
+        """A missing ticket is surfaced by Perforce without an auth retry."""
+        manager = self._make_manager(base_config)
+        admin_p4 = MagicMock()
+        admin_p4.connected.return_value = True
+        admin_p4.run.side_effect = P4Exception("P4PASSWD invalid or unset")
+        monkeypatch.delenv("P4PASSWD", raising=False)
+
+        with patch("src.core.connection.P4", return_value=admin_p4):
+            with pytest.raises(P4Exception, match="P4PASSWD invalid or unset"):
+                manager._issue_ticket_for_user("alice")
+
+        assert admin_p4.password == ""
+        admin_p4.run_login.assert_not_called()
+        admin_p4.run.assert_called_once_with("login", "alice")
+        admin_p4.disconnect.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------
