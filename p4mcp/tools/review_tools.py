@@ -19,7 +19,7 @@ def register(server: "P4MCPServer") -> None:
         return
 
     # ── read ────────────────────────────────────────────────────────────
-    @server.mcp.tool(tags=["read", "reviews"])
+    @server.mcp.tool(tags=["read", "reviews"], annotations={"readOnlyHint": True})
     async def query_reviews(
         action: Annotated[Literal[
             "list", "dashboard", "get", "transitions",

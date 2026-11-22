@@ -19,7 +19,7 @@ def register(server: "P4MCPServer") -> None:
         return
 
     # ── read ────────────────────────────────────────────────────────────
-    @server.mcp.tool(tags=["read", "shelves"])
+    @server.mcp.tool(tags=["read", "shelves"], annotations={"readOnlyHint": True})
     async def query_shelves(
         action: Annotated[Literal["list", "diff", "files"], Field(
             description="Shelve query action: list returns all shelved changelists, diff shows shelved file differences, files lists files in shelved changelist"

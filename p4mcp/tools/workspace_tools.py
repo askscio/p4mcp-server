@@ -19,7 +19,7 @@ def register(server: "P4MCPServer") -> None:
         return
 
     # ── read ────────────────────────────────────────────────────────────
-    @server.mcp.tool(tags=["read", "workspaces"])
+    @server.mcp.tool(tags=["read", "workspaces"], annotations={"readOnlyHint": True})
     async def query_workspaces(
         action: Annotated[Literal["list", "get", "type", "status"], Field(
             description="Workspace query action: list returns all workspaces matching filters, get retrieves specific workspace spec, type identifies workspace category, status shows opened files and sync state"

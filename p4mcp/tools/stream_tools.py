@@ -18,7 +18,7 @@ def register(server: "P4MCPServer") -> None:
     if "streams" not in server.toolsets:
         return
 
-    @server.mcp.tool(tags=["read", "streams"])
+    @server.mcp.tool(tags=["read", "streams"], annotations={"readOnlyHint": True})
     async def query_streams(
         action: Annotated[Literal[
             "list", "get", "children", "parent", "graph",

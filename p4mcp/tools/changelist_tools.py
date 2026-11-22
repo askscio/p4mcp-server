@@ -19,7 +19,7 @@ def register(server: "P4MCPServer") -> None:
         return
 
     # ── read ────────────────────────────────────────────────────────────
-    @server.mcp.tool(tags=["read", "changelists"])
+    @server.mcp.tool(tags=["read", "changelists"], annotations={"readOnlyHint": True})
     async def query_changelists(
         action: Annotated[Literal["get", "list"], Field(
             description="Changelist query action: get retrieves specific changelist details, list returns all changelists matching filters"

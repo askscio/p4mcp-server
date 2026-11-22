@@ -31,7 +31,7 @@ def register(server: "P4MCPServer") -> None:
     # Assets
     # ------------------------------------------------------------------
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_assets(
         ctx: Context,
         search_term: Annotated[Optional[str], Field(
@@ -147,7 +147,7 @@ def register(server: "P4MCPServer") -> None:
         )
         return await handle_with_logging(server, "query", "p4dam_assets", params, "query_p4dam_assets", ctx)
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_asset(
         ctx: Context,
         depot_path: Annotated[Optional[str], Field(
@@ -229,7 +229,7 @@ def register(server: "P4MCPServer") -> None:
     # Navigation — projects, repositories, helix classic branches
     # ------------------------------------------------------------------
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_projects(
         ctx: Context,
         search_term: Annotated[Optional[str], Field(
@@ -254,7 +254,7 @@ def register(server: "P4MCPServer") -> None:
         )
         return await handle_with_logging(server, "query", "p4dam_projects", params, "query_p4dam_projects", ctx)
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_repositories(
         project_id: Annotated[str, Field(
             description="Project short name or UUID.",
@@ -285,7 +285,7 @@ def register(server: "P4MCPServer") -> None:
         )
         return await handle_with_logging(server, "query", "p4dam_repositories", params, "query_p4dam_repositories", ctx)
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_helix_classic_branches(
         project_id: Annotated[str, Field(
             description="Project short name or UUID.",
@@ -315,7 +315,7 @@ def register(server: "P4MCPServer") -> None:
         )
         return await handle_with_logging(server, "query", "p4dam_helix_classic_branches", params, "query_p4dam_helix_classic_branches", ctx)
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def fetch_p4dam_media(
         url: Annotated[str, Field(
             description=(
@@ -347,7 +347,7 @@ def register(server: "P4MCPServer") -> None:
     # File reviews (read)
     # ------------------------------------------------------------------
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_file_reviews(
         project_id: Annotated[str, Field(
             description="Project short name or UUID.",
@@ -385,7 +385,7 @@ def register(server: "P4MCPServer") -> None:
         )
         return await handle_with_logging(server, "query", "p4dam_file_reviews", params, "query_p4dam_file_reviews", ctx)
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_file_review(
         project_id: Annotated[str, Field(
             description="Project short name or UUID.",
@@ -410,7 +410,7 @@ def register(server: "P4MCPServer") -> None:
     # Workflows (read)
     # ------------------------------------------------------------------
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_workflows(
         ctx: Context,
         include: Annotated[Optional[List[str]], Field(
@@ -443,7 +443,7 @@ def register(server: "P4MCPServer") -> None:
         )
         return await handle_with_logging(server, "query", "p4dam_workflows", params, "query_p4dam_workflows", ctx)
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_workflow(
         workflow_id: Annotated[str, Field(
             description="Workflow short name or UUID. Found in query_p4dam_workflows results.",
@@ -469,7 +469,7 @@ def register(server: "P4MCPServer") -> None:
         )
         return await handle_with_logging(server, "query", "p4dam_workflow", params, "query_p4dam_workflow", ctx)
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_workflow_states(
         workflow_id: Annotated[str, Field(
             description="Workflow short name or UUID.",
@@ -502,7 +502,7 @@ def register(server: "P4MCPServer") -> None:
     # Custom attribute templates (read)
     # ------------------------------------------------------------------
 
-    @server.mcp.tool(tags=["read", "p4dam"])
+    @server.mcp.tool(tags=["read", "p4dam"], annotations={"readOnlyHint": True})
     async def query_p4dam_custom_attribute_templates(
         ctx: Context,
         project_id: Annotated[str, Field(

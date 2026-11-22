@@ -19,7 +19,7 @@ def register(server: "P4MCPServer") -> None:
         return
 
     # ── read ────────────────────────────────────────────────────────────
-    @server.mcp.tool(tags=["read", "jobs"])
+    @server.mcp.tool(tags=["read", "jobs"], annotations={"readOnlyHint": True})
     async def query_jobs(
         action: Annotated[Literal["list_jobs", "get_job"], Field(
             description="Job query action: list_jobs returns jobs linked to changelist, get_job retrieves specific job details"

@@ -2,6 +2,8 @@ import json
 import logging
 
 from fastmcp import FastMCP, Context
+from fastmcp.server.transforms.search import BM25SearchTransform, RegexSearchTransform
+from mcp.types import ToolAnnotations
 from .core.config import Config
 from .core.connection import P4ConnectionManager
 
@@ -11,6 +13,20 @@ from .middleware.telemetry_middleware import TelemetryMiddleware
 from .tools import ALL_REGISTRARS
 
 logger = logging.getLogger(__name__)
+
+class _ReadOnlyRegexSearchTransform(RegexSearchTransform):
+    def _make_search_tool(self):
+        tool = super()._make_search_tool()
+        tool.annotations = ToolAnnotations(readOnlyHint=True)
+        return tool
+
+
+class _ReadOnlyBM25SearchTransform(BM25SearchTransform):
+    def _make_search_tool(self):
+        tool = super()._make_search_tool()
+        tool.annotations = ToolAnnotations(readOnlyHint=True)
+        return tool
+
 
 class P4MCPServer:
     """Perforce MCP Server with improved structure"""
@@ -152,32 +168,27 @@ class P4MCPServer:
         if not self.search_transform:
             return
 
-        from fastmcp.server.transforms.search import (
-            RegexSearchTransform,
-            BM25SearchTransform,
-        )
-
         always_visible = ["query_server"]
 
         if self.search_transform == "regex":
-            self.mcp.add_transform(RegexSearchTransform(
+            self.mcp.add_transform(_ReadOnlyRegexSearchTransform(
                 always_visible=always_visible,
             ))
             logger.info("Search transform enabled: regex")
 
         elif self.search_transform == "bm25":
-            self.mcp.add_transform(BM25SearchTransform(
+            self.mcp.add_transform(_ReadOnlyBM25SearchTransform(
                 always_visible=always_visible,
             ))
             logger.info("Search transform enabled: bm25")
 
         elif self.search_transform == "both":
-            self.mcp.add_transform(RegexSearchTransform(
+            self.mcp.add_transform(_ReadOnlyRegexSearchTransform(
                 always_visible=always_visible,
                 search_tool_name="regex_search_tools",
                 call_tool_name="regex_call_tool",
             ))
-            self.mcp.add_transform(BM25SearchTransform(
+            self.mcp.add_transform(_ReadOnlyBM25SearchTransform(
                 always_visible=always_visible,
                 search_tool_name="semantic_search_tools",
                 call_tool_name="semantic_call_tool",
