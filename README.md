@@ -1031,6 +1031,25 @@ You can check your server's security level with:
 p4 configure show security
 ```
 
+### `as_user` identity format
+
+`as_user` accepts either a **Perforce username** or an **email address**:
+
+| `as_user` value | Behaviour |
+|---|---|
+| `alice` | Used directly as the Perforce username |
+| `alice@company.com` | Email is validated against the `Glean-User-Email` header, then normalized to the local-part (`alice`) before execution |
+
+When `as_user` is an email, the middleware strips the domain (`@...`) and passes
+only the local-part to downstream handlers and the P4 connection. This means
+Perforce always receives a plain username regardless of the input format.
+
+When the `Glean-User-Email` HTTP header is present, the server verifies that:
+- An email `as_user` matches the header value (case-insensitive).
+- A plain username `as_user` matches the header's local-part (case-insensitive).
+
+A mismatch produces an `AS_USER_MISMATCH` denial.
+
 ### Behaviour
 
 | Impersonation | `as_user` supplied | Result |
@@ -1038,7 +1057,7 @@ p4 configure show security
 | Disabled | No | Normal operation (legacy) |
 | Disabled | Yes | **Denied** (`IMPERSONATION_DISABLED`) |
 | Enabled | No | **Denied** (`AS_USER_REQUIRED`) |
-| Enabled | Yes | Executes as `as_user` |
+| Enabled | Yes | Executes as `as_user` (normalized to username) |
 
 ### Denial reason codes
 
@@ -1048,6 +1067,7 @@ machine-readable `reason_code`:
 - `IMPERSONATION_DISABLED` -- `as_user` was provided but impersonation is off.
 - `AS_USER_REQUIRED` -- impersonation is on but no `as_user` was supplied.
 - `AS_USER_INVALID` -- `as_user` is empty or contains only whitespace.
+- `AS_USER_MISMATCH` -- `as_user` does not match the authenticated identity from the `Glean-User-Email` header.
 
 ### Concurrency
 

@@ -1,4 +1,5 @@
 from fastmcp.server.middleware import Middleware, MiddlewareContext
+from fastmcp.server.dependencies import get_http_headers
 from fastmcp.exceptions import ToolError
 import logging
 from ..core.config import Config
@@ -193,6 +194,36 @@ class CheckPermissionMiddleware(Middleware):
                     f"as_user is required for tool '{tool_name}' when impersonation is enabled",
                     ImpersonationReasonCode.AS_USER_REQUIRED,
                 )
+            # Verify as_user matches Glean-User-Email header (HTTP transport only)
+            headers = get_http_headers()
+            user_email = headers.get("glean-user-email")
+            if user_email is not None:
+                # Normalize both sides for comparison: if as_user is an email
+                # it must match the header exactly (case-insensitive); if it is
+                # a plain username it must match the local-part of the header.
+                as_user_lower = as_user.lower()
+                header_lower = user_email.strip().lower()
+                if "@" in as_user:
+                    if as_user_lower != header_lower:
+                        raise ImpersonationPolicyError(
+                            f"as_user '{as_user}' does not match authenticated user "
+                            f"from Glean-User-Email header (tool '{tool_name}')",
+                            ImpersonationReasonCode.AS_USER_MISMATCH,
+                        )
+                else:
+                    # as_user is a plain username – compare against header local-part
+                    header_local = header_lower.split("@", 1)[0]
+                    if as_user_lower != header_local:
+                        raise ImpersonationPolicyError(
+                            f"as_user '{as_user}' does not match authenticated user "
+                            f"from Glean-User-Email header (tool '{tool_name}')",
+                            ImpersonationReasonCode.AS_USER_MISMATCH,
+                        )
+
+            # Normalize email-style as_user to username (local-part before @).
+            if "@" in as_user:
+                as_user = as_user.split("@", 1)[0]
+
             return as_user
         else:
             # Impersonation disabled – providing as_user is a hard error.
@@ -248,7 +279,7 @@ class CheckPermissionMiddleware(Middleware):
                 )
                 raise ToolError(f"Policy denied: {ipe.reason_code} - {str(ipe)}")
 
-            # Pass the effective Perforce username downstream and scope every
+            # Pass the normalized Perforce username downstream and scope every
             # connection created during this request to that user.
             if effective_user is not None:
                 arguments["as_user"] = effective_user

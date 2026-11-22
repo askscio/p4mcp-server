@@ -12,6 +12,7 @@ class ImpersonationReasonCode:
     IMPERSONATION_DISABLED = "IMPERSONATION_DISABLED"
     AS_USER_REQUIRED = "AS_USER_REQUIRED"
     AS_USER_INVALID = "AS_USER_INVALID"
+    AS_USER_MISMATCH = "AS_USER_MISMATCH"
 
 
 class ImpersonationPolicyError(Exception):

@@ -27,7 +27,7 @@ def register(server: "P4MCPServer") -> None:
         ctx: Context,
         as_user: Annotated[
             str | None,
-            Field(description="Perforce username; required when impersonation is enabled."),
+            Field(description="Perforce username or email; required when impersonation is enabled."),
         ] = None,
         changelist_id: Annotated[Optional[str], Field(
             default=None,
@@ -83,7 +83,7 @@ def register(server: "P4MCPServer") -> None:
         ctx: Context,
         as_user: Annotated[
             str | None,
-            Field(description="Perforce username; required when impersonation is enabled."),
+            Field(description="Perforce username or email; required when impersonation is enabled."),
         ] = None,
         changelist_id: Annotated[Optional[str], Field(
             default=None,
