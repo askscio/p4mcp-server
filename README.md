@@ -234,10 +234,21 @@ Using P4 tickets:
 
 > **Read-only root filesystem (`--read-only` / `readOnlyRootFilesystem`):** provide a writable/tmpfs `/home/mcpuser` (e.g. `--tmpfs /home/mcpuser`) so the ticket copy can be written; otherwise the ticket copy fails and P4 will report a normal auth error.
 
-Using a password:
+Using a password for a regular (non-impersonated) server:
 ```bash
 -e P4PASSWD="your_password"
 ```
+
+For impersonation, create the admin ticket before starting the container and
+share it as `P4PASSWD` (or share the P4 ticket file). `P4PASSWD` is the ticket,
+not a plaintext password:
+```bash
+-e P4PASSWD="your_pre_created_admin_ticket"
+-v /Users/your_username/.p4tickets:/root/.p4tickets
+```
+
+The ticket-file mount must be writable when the server issues target-user
+tickets. The MCP server does not run the admin login command.
 
 **Workspace Host Restrictions**
 
@@ -972,6 +983,77 @@ The MCP server checks properties in this order. Each property is resolved indepe
 - Property changes take effect within 60 seconds due to server-side caching, or immediately on a new MCP server connection.
 
 - Only the value `false` (case-insensitive) disables or blocks access. Any other value (including `true`, `1`, `yes`, or invalid strings) is treated as not blocking.
+
+## Superuser impersonation
+
+When the MCP server is backed by a Perforce superuser account, impersonation
+allows each tool call to execute as a different user via the `as_user` parameter.
+
+### Configuration
+
+| Environment variable | Type | Default | Description |
+|---|---|---|---|
+| `MCP_IMPERSONATION_ENABLED` | bool | `false` | Enable per-call impersonation via `as_user` |
+
+The server authenticates with the superuser account configured through `P4USER`.
+When `MCP_IMPERSONATION_ENABLED=true`, every P4-backed tool call **must** include
+`as_user` to identify the effective user. The server will fail fast at startup if
+impersonation is enabled but `P4USER` is not set.
+
+The native Perforce tools expose `as_user` as an optional parameter; it becomes
+required at runtime when impersonation is enabled. P4 DAM API tools do not use a
+Perforce connection and are outside this impersonation setting.
+
+#### Security level compatibility
+
+Perforce servers with security level >= 3 require ticket-based authentication.
+At level 4, SSL is additionally mandatory for all connections.
+
+For impersonation, `P4PASSWD` must contain a pre-created, currently valid
+ticket for the admin account in `P4USER`; it must not contain the admin's
+plaintext password. The admin ticket must be available before the MCP server
+starts handling requests, either in `P4PASSWD` or through the shared P4 ticket
+file configured by the P4 environment.
+
+On each impersonated request, the server uses that existing admin ticket to
+connect and directly runs `p4 login <as_user>` to issue a target-user ticket.
+It never runs an admin `p4 login` command and does not fall back to password or
+SSO authentication. The target ticket is stored in the shared ticket file for
+the fresh request connection to use. An expired or missing admin ticket is
+reported as the Perforce error from that request.
+
+The existing `p4 login -s` checks only validate ticket status; they do not
+authenticate the admin account.
+
+You can check your server's security level with:
+
+```bash
+p4 configure show security
+```
+
+### Behaviour
+
+| Impersonation | `as_user` supplied | Result |
+|---|---|---|
+| Disabled | No | Normal operation (legacy) |
+| Disabled | Yes | **Denied** (`IMPERSONATION_DISABLED`) |
+| Enabled | No | **Denied** (`AS_USER_REQUIRED`) |
+| Enabled | Yes | Executes as `as_user` |
+
+### Denial reason codes
+
+When a request is denied by impersonation policy, the error response includes a
+machine-readable `reason_code`:
+
+- `IMPERSONATION_DISABLED` -- `as_user` was provided but impersonation is off.
+- `AS_USER_REQUIRED` -- impersonation is on but no `as_user` was supplied.
+- `AS_USER_INVALID` -- `as_user` is empty or contains only whitespace.
+
+### Concurrency
+
+Each impersonated call uses a fresh, request-scoped P4 connection with `p4.user`
+set to the effective user. Concurrent requests for different users are fully
+isolated and never share connection state.
 
 ## Available tools
 

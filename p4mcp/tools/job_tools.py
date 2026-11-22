@@ -25,6 +25,10 @@ def register(server: "P4MCPServer") -> None:
             description="Job query action: list_jobs returns jobs linked to changelist, get_job retrieves specific job details"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         changelist_id: Annotated[Optional[str], Field(
             default=None,
             description="Changelist ID - required for list_jobs action",
@@ -65,6 +69,10 @@ def register(server: "P4MCPServer") -> None:
             examples=["job67890"],
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
     ) -> dict:
         """Link or unlink jobs (WRITE permission)"""
         params = m.ModifyJobsParams(action=action, changelist_id=changelist_id, job_id=job_id)

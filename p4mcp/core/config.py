@@ -8,6 +8,15 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
+
+def _parse_bool_env(name: str, default: bool = False) -> bool:
+    """Safely parse a boolean environment variable."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes")
+
+
 @dataclass
 class Config:
     """Configuration for P4 MCP server"""
@@ -20,6 +29,9 @@ class Config:
     # Tool settings
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL, OFF, QUIET
     log_dir: Optional[str] = None
+
+    # Impersonation settings
+    impersonation_enabled: bool = False
 
     # SSL/TLS settings for Swarm API connections.
     # True = verify with default CA bundle, False = disable verification,
@@ -46,6 +58,9 @@ class Config:
             "p4client": os.getenv("P4CLIENT"),
             "log_level": os.getenv("LOG_LEVEL", "INFO"),
             "log_dir": os.getenv("P4MCP_LOG_DIR"),
+            "impersonation_enabled": _parse_bool_env(
+                "MCP_IMPERSONATION_ENABLED", False
+            ),
             "ssl_verify": cls._parse_ssl_verify(),
             "max_results": cls._parse_positive_int(
                 "P4MCP_MAX_RESULTS", os.getenv("P4MCP_MAX_RESULTS"), default=10000
@@ -143,6 +158,7 @@ class Config:
             "p4client": self.p4client,
             "log_level": self.log_level,
             "log_dir": self.log_dir,
+            "impersonation_enabled": self.impersonation_enabled,
             "ssl_verify": self.ssl_verify,
             "max_results": self.max_results,
             "max_scan_rows": self.max_scan_rows,

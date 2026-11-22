@@ -25,6 +25,10 @@ def register(server: "P4MCPServer") -> None:
             description="Changelist query action: get retrieves specific changelist details, list returns all changelists matching filters"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         changelist_id: Annotated[Optional[str], Field(
             default=None,
             description="Changelist ID - required for get action",
@@ -77,6 +81,10 @@ def register(server: "P4MCPServer") -> None:
             description="Changelist modification action: create makes new changelist, update modifies description, submit commits changes, delete removes changelist, move_files reorganizes files between changelists"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         changelist_id: Annotated[Optional[str], Field(
             default=None,
             description="Changelist ID - required for most actions except create",

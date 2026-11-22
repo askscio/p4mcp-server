@@ -23,6 +23,24 @@ logger = logging.getLogger(__name__)
 # default is declared; callers pass a fresh ``[]`` sentinel to ``.get()`` so an
 # unset var never returns a shared list that could leak across requests.
 _last_warnings: ContextVar[List[str]] = ContextVar("_last_warnings")
+_effective_user: ContextVar[Optional[str]] = ContextVar(
+    "_effective_user", default=None
+)
+
+
+def set_effective_user(user: Optional[str]):
+    """Set the effective Perforce identity for the current tool request."""
+    return _effective_user.set(user)
+
+
+def get_effective_user() -> Optional[str]:
+    """Return the effective Perforce identity for the current tool request."""
+    return _effective_user.get()
+
+
+def reset_effective_user(token) -> None:
+    """Restore the effective Perforce identity after a tool request."""
+    _effective_user.reset(token)
 
 
 def pop_last_warnings() -> List[str]:
@@ -286,10 +304,93 @@ class P4ConnectionManager:
         except P4Exception as e:
             logger.error(f"P4Error: Failed to connect to P4: {e}")
             raise
+
+    @property
+    def actor_user(self) -> str:
+        """Return the configured service identity used to issue user tickets."""
+        if self.config.p4user:
+            return self.config.p4user
+        session = getattr(self, "_session", None)
+        p4 = getattr(session, "p4", None)
+        return getattr(p4, "user", None) or "unknown_actor"
+
+    def _create_fresh_p4(self, effective_user: str) -> P4:
+        """Create a request-scoped P4 connection for an impersonated user."""
+        p4 = P4(cwd=os.getcwd())
+        if self.config.p4port:
+            p4.port = self.config.p4port
+        if self.config.p4client:
+            p4.client = self.config.p4client
+        p4.user = effective_user
+        p4.prog = "P4-MCP-Server"
+        p4.version = __version__
+        return p4
+
+    def _issue_ticket_for_user(self, effective_user: str) -> None:
+        """Use the pre-created admin ticket to issue a ticket for the user."""
+        p4 = P4(cwd=os.getcwd())
+        if self.config.p4port:
+            p4.port = self.config.p4port
+        p4.user = self.config.p4user or self._session.p4.user
+        p4.password = os.environ.get("P4PASSWD", "")
+        p4.prog = "P4-MCP-Server"
+        p4.version = __version__
+
+        try:
+            p4.connect()
+            p4.run("login", effective_user)
+            logger.info(
+                "Issued ticket for impersonated user '%s' via service user '%s'",
+                effective_user,
+                p4.user,
+            )
+        finally:
+            try:
+                if p4.connected():
+                    p4.disconnect()
+            except Exception:
+                pass
     
     @asynccontextmanager
-    async def get_connection(self):
-        """Get P4 connection context manager"""
+    async def get_connection(self, effective_user: str | None = None):
+        """Get the shared connection or a fresh connection for one user."""
+        effective_user = effective_user or _effective_user.get()
+        if effective_user is not None:
+            self._issue_ticket_for_user(effective_user)
+            p4 = self._create_fresh_p4(effective_user)
+            try:
+                p4.connect()
+                if self.config.max_results is not None:
+                    p4.maxresults = self.config.max_results
+                if self.config.max_scan_rows is not None:
+                    p4.maxscanrows = self.config.max_scan_rows
+                p4.exception_level = 1
+                yield p4
+            except P4Exception as e:
+                logger.error(
+                    "P4Error: impersonated operation failed (effective_user=%s): %s",
+                    effective_user,
+                    e,
+                )
+                raise
+            finally:
+                try:
+                    from ..handlers.utils import collect_warnings
+
+                    _last_warnings.set(collect_warnings(p4))
+                except Exception as warn_error:
+                    logger.warning("Failed to collect P4 warnings: %s", warn_error)
+                    _last_warnings.set([])
+                try:
+                    if p4.connected():
+                        p4.disconnect()
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to disconnect impersonated P4 object: %s",
+                        cleanup_error,
+                    )
+            return
+
         if not self._is_connected and not self._connection:
             await self.initialize()
         

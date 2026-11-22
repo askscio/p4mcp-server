@@ -21,6 +21,10 @@ def register(server: "P4MCPServer") -> None:
             description="Server query action: server_info returns P4 server metadata and version, current_user returns authenticated user details and permissions"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
     ) -> dict:
         """Get server info and current user information (READ permission)"""
         params = m.QueryServerParams(action=action)

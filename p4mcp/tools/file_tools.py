@@ -29,6 +29,10 @@ def register(server: "P4MCPServer") -> None:
             examples=["//depot/projectX/file.txt", "/local/path/file.txt"],
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         file2: Annotated[Optional[str], Field(
             default=None,
             description="Second file path - required for diff action",
@@ -85,6 +89,10 @@ def register(server: "P4MCPServer") -> None:
             description="File modification action"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         file_paths: Annotated[Optional[List[str]], Field(
             default=None,
             description="Full depot or client or local paths",

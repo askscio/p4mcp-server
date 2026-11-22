@@ -34,6 +34,10 @@ def register(server: "P4MCPServer") -> None:
             )
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         stream_name: Annotated[Optional[str], Field(
             default=None,
             description="Stream depot path (e.g. '//depot/main'). Required for most actions.",
@@ -165,6 +169,10 @@ def register(server: "P4MCPServer") -> None:
                 )
             )],
             ctx: Context,
+            as_user: Annotated[
+                str | None,
+                Field(description="Perforce username; required when impersonation is enabled."),
+            ] = None,
             stream_name: Annotated[Optional[str], Field(
                 default=None,
                 description="Stream depot path (e.g. '//depot/main'). Also used as -S flag for propagation.",

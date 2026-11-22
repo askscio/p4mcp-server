@@ -28,6 +28,10 @@ def register(server: "P4MCPServer") -> None:
             description="Review query action: list all reviews, dashboard for current user, get specific review, transitions, files_readby, files, comments, activity"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         review_id: Annotated[Optional[int], Field(
             default=None,
             description="Review ID - required for get, transitions, files_readby, files, comments, activity actions",
@@ -140,6 +144,10 @@ def register(server: "P4MCPServer") -> None:
             "To delete/obliterate review, use 'obliterate' action which requires approval"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         review_id: Annotated[Optional[int], Field(
             default=None,
             description="Review ID (required for most actions except create, archive_inactive)",

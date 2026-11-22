@@ -25,6 +25,10 @@ def register(server: "P4MCPServer") -> None:
             description="Shelve query action: list returns all shelved changelists, diff shows shelved file differences, files lists files in shelved changelist"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         changelist_id: Annotated[Optional[str], Field(
             default=None,
             description="Changelist ID - required for diff and files actions",
@@ -61,6 +65,10 @@ def register(server: "P4MCPServer") -> None:
             examples=["12345"],
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         file_paths: Annotated[Optional[List[str]], Field(
             default=None,
             description="File paths for shelve/unshelve/update/delete",

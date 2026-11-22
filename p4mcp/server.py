@@ -14,6 +14,7 @@ from .tools import ALL_REGISTRARS
 
 logger = logging.getLogger(__name__)
 
+
 class _ReadOnlyRegexSearchTransform(RegexSearchTransform):
     def _make_search_tool(self):
         tool = super()._make_search_tool()
@@ -28,6 +29,10 @@ class _ReadOnlyBM25SearchTransform(BM25SearchTransform):
         return tool
 
 
+class ImpersonationConfigError(ValueError):
+    """Raised when impersonation is enabled without a configured P4 user."""
+
+
 class P4MCPServer:
     """Perforce MCP Server with improved structure"""
 
@@ -40,6 +45,7 @@ class P4MCPServer:
 
         # Load P4 config (logging is already configured in main.py)
         self.p4config = Config.load()
+        self._validate_impersonation_config(self.p4config)
 
         # CLI args take priority over config/env for the result limits. Only
         # override when a CLI value is supplied; reuse the config validator so a
@@ -73,11 +79,18 @@ class P4MCPServer:
         middleware = []
         if self.session_id:
             middleware.append(TelemetryMiddleware())
-        middleware.append(CheckPermissionMiddleware(self.p4_manager))
+        middleware.append(CheckPermissionMiddleware(self.p4_manager, self.p4config))
 
         self.mcp = FastMCP("P4 MCP Server", middleware=middleware)
         self._initialize_dependencies()
         self._apply_search_transforms()
+
+    @staticmethod
+    def _validate_impersonation_config(config: Config) -> None:
+        if config.impersonation_enabled and not config.p4user:
+            raise ImpersonationConfigError(
+                "MCP_IMPERSONATION_ENABLED requires P4USER to be configured"
+            )
     
     def _initialize_dependencies(self) -> None:
         """Initialize all dependencies with proper error handling"""

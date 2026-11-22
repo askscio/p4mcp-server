@@ -25,6 +25,10 @@ def register(server: "P4MCPServer") -> None:
             description="Workspace query action: list returns all workspaces matching filters, get retrieves specific workspace spec, type identifies workspace category, status shows opened files and sync state"
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         workspace_name: Annotated[Optional[str], Field(
             default=None,
             description="Workspace name - required for get, type, status actions",
@@ -61,6 +65,10 @@ def register(server: "P4MCPServer") -> None:
             examples=["my_workspace"],
         )],
         ctx: Context,
+        as_user: Annotated[
+            str | None,
+            Field(description="Perforce username; required when impersonation is enabled."),
+        ] = None,
         workspace_root: Annotated[Optional[str], Field(
             default=None,
             description="Root path of the workspace",
